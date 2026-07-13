@@ -1,26 +1,106 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ─────────────────────────────────────────────────────────────
+   상권 인사이트 — "데이터 리서치 터미널" 테마
+   딥 잉크 네이비 + 골드 액센트, 생존율 신호등(에메랄드/앰버/레드)
+   ───────────────────────────────────────────────────────────── */
+@theme {
+  --color-ink-950: #0a0f1e;
+  --color-ink-900: #0e1526;
+  --color-ink-800: #141d33;
+  --color-ink-700: #1b2542;
+  --color-ink-600: #263354;
+  --color-line: #263354;
+
+  --color-fg: #e9edf6;
+  --color-muted: #8a95b0;
+  --color-faint: #5b6683;
+
+  --color-gold: #e3b65a;
+  --color-gold-soft: #f0d194;
+
+  --color-safe: #3ddc97;
+  --color-caution: #f5b84b;
+  --color-risk: #f0655d;
+
+  --font-display: var(--font-hahmlet), serif;
+  --font-body: var(--font-plex), sans-serif;
+  --font-numeric: var(--font-mono), monospace;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html,
+body {
+  height: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-ink-950);
+  color: var(--color-fg);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 패널 배경의 미세한 사선 텍스처 + 골드 글로우 */
+.panel-texture {
+  background-image:
+    radial-gradient(ellipse 80% 50% at 100% 0%, rgba(227, 182, 90, 0.05), transparent 60%),
+    repeating-linear-gradient(
+      -12deg,
+      transparent 0px,
+      transparent 23px,
+      rgba(255, 255, 255, 0.014) 23px,
+      rgba(255, 255, 255, 0.014) 24px
+    );
+}
+
+/* 결과 카드 순차 등장 */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.rise-in {
+  animation: rise-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* 게이지 호 애니메이션 */
+@keyframes dash-in {
+  from {
+    stroke-dashoffset: var(--dash-total);
+  }
+}
+.gauge-arc {
+  animation: dash-in 1s cubic-bezier(0.33, 1, 0.68, 1) both;
+}
+
+/* 로딩 단계 점멸 */
+@keyframes pulse-soft {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+.pulse-soft {
+  animation: pulse-soft 1.4s ease-in-out infinite;
+}
+
+/* 패널 스크롤바 */
+.panel-scroll::-webkit-scrollbar {
+  width: 10px;
+}
+.panel-scroll::-webkit-scrollbar-thumb {
+  background: #263354;
+  border-radius: 8px;
+  border: 2px solid #0e1526;
+}
+.panel-scroll::-webkit-scrollbar-track {
+  background: transparent;
 }

@@ -1,65 +1,325 @@
-import Image from "next/image";
+"use client";
+/**
+ * 메인 화면 — 지도(좌) / 컨트롤·결과 패널(우) 단일 분할 (PRD §5)
+ *
+ * 두 진입 모드가 하나의 결과 카드로 수렴한다:
+ *  - 위치 먼저(UC-001): 지도 클릭 → 상권 확정 → 업종 선택 → 분석
+ *  - 업종 먼저(UC-002): 업종 선택 → 히트맵 → 상권 클릭 → 분석
+ *  - 재탐색(UC-003): 결과 이후 조건 변경 시 자동 재질의
+ */
+import { useCallback, useRef, useState } from "react";
+
+import InspectorConsole from "@/components/InspectorConsole";
+import MapView, { type HeatmapMetric } from "@/components/MapView";
+import ResultPanel, {
+  ErrorState,
+  IdleState,
+  LoadingState,
+} from "@/components/ResultPanel";
+import { nearestSangwon, MAX_SNAP_METERS } from "@/lib/geo";
+import { useAnalyze, useHeatmap, useMeta } from "@/lib/hooks";
+import { inspect } from "@/lib/inspector";
+
+type Mode = "location" | "industry";
 
 export default function Home() {
+  const meta = useMeta();
+  const analyze = useAnalyze();
+
+  const [mode, setMode] = useState<Mode>("location");
+  const [industryCode, setIndustryCode] = useState<string>("");
+  const [selectedCode, setSelectedCode] = useState<number | null>(null);
+  const [pickedPoint, setPickedPoint] = useState<{ lat: number; lng: number } | null>(null);
+  const [boundaryNotice, setBoundaryNotice] = useState<{
+    message: string;
+    suggestion: { code: number; name: string | null; distance: number } | null;
+  } | null>(null);
+  const [heatmapMetric, setHeatmapMetric] = useState<HeatmapMetric>("sales");
+
+  /** 첫 분석 이후에는 조건 변경 시 자동 재질의 (재탐색 루프) */
+  const hasAnalyzedRef = useRef(false);
+
+  const heatmap = useHeatmap(industryCode || null, mode === "industry");
+
+  const sangwons = meta.data?.sangwons ?? [];
+  const industries = meta.data?.industries ?? [];
+  const selectedSangwon = sangwons.find((s) => s.code === selectedCode) ?? null;
+
+  const runAnalyze = useCallback(
+    (sangwonCode: number, industry: string) => {
+      hasAnalyzedRef.current = true;
+      analyze.mutate({ sangwonCode, industryCode: industry });
+    },
+    [analyze]
+  );
+
+  // ---- 위치 먼저: 지도 클릭 → 최근접 상권 매핑 (UC-001 / UC-005) ----
+  const handlePickPoint = useCallback(
+    (lat: number, lng: number) => {
+      inspect("map", `지도 클릭 — (${lat.toFixed(6)}, ${lng.toFixed(6)})`, { lat, lng });
+      setPickedPoint({ lat, lng });
+      const found = nearestSangwon(sangwons, lat, lng);
+      if (!found) return;
+
+      if (!found.withinBoundary) {
+        inspect(
+          "geo",
+          `경계 밖 — 최근접 ${found.sangwon.name} ${found.distanceMeters}m (허용 ${MAX_SNAP_METERS}m 초과)`,
+          { nearest: found.sangwon, distanceMeters: found.distanceMeters }
+        );
+        setSelectedCode(null);
+        setBoundaryNotice({
+          message: `클릭한 지점 반경 ${MAX_SNAP_METERS}m 안에 분석 대상 상권이 없습니다.`,
+          suggestion: {
+            code: found.sangwon.code,
+            name: found.sangwon.name,
+            distance: found.distanceMeters,
+          },
+        });
+        return;
+      }
+
+      inspect(
+        "geo",
+        `좌표→상권 매핑 — ${found.sangwon.name} (${found.distanceMeters}m, 후보 ${sangwons.length}개 중 최근접)`,
+        { matched: found.sangwon, distanceMeters: found.distanceMeters }
+      );
+      setBoundaryNotice(null);
+      setSelectedCode(found.sangwon.code);
+      if (hasAnalyzedRef.current && industryCode) {
+        runAnalyze(found.sangwon.code, industryCode);
+      }
+    },
+    [sangwons, industryCode, runAnalyze]
+  );
+
+  // ---- 업종 먼저: 히트맵 셀/리스트에서 상권 선택 → 즉시 분석 (UC-002) ----
+  const handleSelectSangwon = useCallback(
+    (code: number) => {
+      const s = sangwons.find((x) => x.code === code);
+      inspect("map", `상권 선택 — ${s?.name ?? code} (코드 ${code})`, s);
+      setBoundaryNotice(null);
+      setSelectedCode(code);
+      if (industryCode) {
+        runAnalyze(code, industryCode);
+      }
+    },
+    [industryCode, runAnalyze, sangwons]
+  );
+
+  const handleIndustryChange = (code: string) => {
+    setIndustryCode(code);
+    if (hasAnalyzedRef.current && selectedCode != null && code) {
+      runAnalyze(selectedCode, code);
+    }
+  };
+
+  const switchMode = (m: Mode) => {
+    setMode(m);
+    setBoundaryNotice(null);
+  };
+
+  const canAnalyze = selectedCode != null && !!industryCode;
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <div className="flex h-full flex-col lg:flex-row">
+      {/* ── 좌: 지도 ─────────────────────────────────────── */}
+      <main className="relative min-h-[38vh] min-w-0 flex-1 lg:min-h-0">
+        <MapView
+          mode={mode}
+          sangwons={sangwons}
+          heatmap={heatmap.data ?? null}
+          heatmapMetric={heatmapMetric}
+          selectedCode={selectedCode}
+          pickedPoint={pickedPoint}
+          onPickPoint={handlePickPoint}
+          onSelectSangwon={handleSelectSangwon}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+        <InspectorConsole />
       </main>
+
+      {/* ── 우: 컨트롤 + 결과 패널 ──────────────────────── */}
+      <aside className="panel-texture flex min-h-0 w-full flex-1 shrink-0 flex-col border-t border-line/70 bg-ink-900 lg:w-[440px] lg:flex-none lg:border-l lg:border-t-0">
+        {/* 브랜드 */}
+        <header className="border-b border-line/60 px-6 pb-4 pt-5">
+          <div className="flex items-baseline justify-between">
+            <h1 className="font-[family-name:var(--font-display)] text-xl font-semibold tracking-tight text-fg">
+              상권 <span className="text-gold">인사이트</span>
+            </h1>
+            <span className="text-[10px] uppercase tracking-[0.2em] text-faint">
+              AI Research · Demo
+            </span>
+          </div>
+          <p className="mt-1 text-[11px] leading-relaxed text-muted">
+            &ldquo;이 자리에 이 업종, 들어가도 될까?&rdquo; — 실측 생존율과 AI 매출 예측으로 답합니다
+          </p>
+        </header>
+
+        {/* 모드 토글 */}
+        <div className="px-6 pt-4">
+          <div className="grid grid-cols-2 gap-1 rounded-xl border border-line/70 bg-ink-800/70 p-1">
+            {(
+              [
+                ["location", "자리부터 찾기", "이 자리 어때?"],
+                ["industry", "업종부터 찾기", "어디가 좋아?"],
+              ] as const
+            ).map(([m, label, sub]) => (
+              <button
+                key={m}
+                onClick={() => switchMode(m)}
+                className={`rounded-lg px-3 py-2 text-left transition ${
+                  mode === m
+                    ? "bg-ink-600 shadow-inner"
+                    : "opacity-55 hover:opacity-90"
+                }`}
+              >
+                <div className={`text-[13px] font-semibold ${mode === m ? "text-gold-soft" : "text-fg"}`}>
+                  {label}
+                </div>
+                <div className="text-[10px] text-faint">{sub}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 조건 입력 */}
+        <div className="space-y-3 px-6 py-4">
+          <div>
+            <label className="mb-1.5 block text-[11px] font-medium text-muted">
+              업종 {mode === "industry" && <span className="text-gold">— 선택하면 히트맵이 그려집니다</span>}
+            </label>
+            <select
+              value={industryCode}
+              onChange={(e) => handleIndustryChange(e.target.value)}
+              className="w-full appearance-none rounded-lg border border-line bg-ink-800 px-3.5 py-2.5 text-sm text-fg outline-none focus:border-gold/60"
+            >
+              <option value="">업종을 선택하세요</option>
+              {industries.map((i) => (
+                <option key={i.code} value={i.code}>
+                  {i.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* 히트맵 색 기준 토글 (업종 먼저 모드) */}
+          {mode === "industry" && industryCode && (
+            <div className="flex items-center gap-2 text-[11px]">
+              <span className="text-faint">히트맵 기준</span>
+              {(
+                [
+                  ["sales", "매출 백분위"],
+                  ["survival", "생존율"],
+                ] as const
+              ).map(([k, label]) => (
+                <button
+                  key={k}
+                  onClick={() => setHeatmapMetric(k)}
+                  className={`rounded-full border px-2.5 py-1 transition ${
+                    heatmapMetric === k
+                      ? "border-gold/60 bg-gold/10 text-gold-soft"
+                      : "border-line text-muted hover:border-gold/30"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+              {heatmapMetric === "survival" &&
+                heatmap.data?.survivalGranularity === "seoul_industry" && (
+                  <span className="text-faint">※ 업종 단위 통계 — 상권 간 동일</span>
+                )}
+            </div>
+          )}
+
+          {/* 선택된 상권 표시 */}
+          {selectedSangwon && (
+            <div className="flex items-center justify-between rounded-lg border border-gold/25 bg-gold/5 px-3.5 py-2.5">
+              <div>
+                <div className="text-[10px] text-faint">선택한 곳</div>
+                <div className="text-sm font-medium text-fg">
+                  {selectedSangwon.name}
+                  <span className="ml-2 text-[11px] text-muted">
+                    {[selectedSangwon.gu, selectedSangwon.dong].filter(Boolean).join(" ")}
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedCode(null)}
+                className="text-xs text-faint transition hover:text-fg"
+                aria-label="상권 선택 해제"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
+          {/* 상권 경계 밖 안내 (UC-005) */}
+          {boundaryNotice && (
+            <div className="rounded-lg border border-caution/30 bg-caution/5 px-3.5 py-3 text-xs leading-relaxed text-muted">
+              {boundaryNotice.message}
+              {boundaryNotice.suggestion && (
+                <button
+                  onClick={() => handleSelectSangwon(boundaryNotice.suggestion!.code)}
+                  className="mt-2 block w-full rounded-md border border-line bg-ink-700/70 px-3 py-2 text-left text-fg transition hover:border-gold/50"
+                >
+                  가장 가까운 상권 사용:{" "}
+                  <b>{boundaryNotice.suggestion.name}</b>
+                  <span className="ml-1 text-faint">
+                    ({boundaryNotice.suggestion.distance}m)
+                  </span>
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* 분석하기 (위치 먼저 모드) */}
+          {mode === "location" && (
+            <button
+              onClick={() => canAnalyze && runAnalyze(selectedCode!, industryCode)}
+              disabled={!canAnalyze || analyze.isPending}
+              className="w-full rounded-xl bg-gold px-4 py-3 text-sm font-bold text-ink-950 transition enabled:hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-30"
+            >
+              {analyze.isPending ? "분석 중…" : "분석하기"}
+            </button>
+          )}
+        </div>
+
+        {/* 결과 영역 */}
+        <div className="panel-scroll flex-1 overflow-y-auto px-6 pb-4">
+          {analyze.isPending ? (
+            <LoadingState />
+          ) : analyze.isError ? (
+            <ErrorState
+              message={analyze.error.message}
+              onRetry={() =>
+                selectedCode != null &&
+                industryCode &&
+                runAnalyze(selectedCode, industryCode)
+              }
+            />
+          ) : analyze.data ? (
+            <ResultPanel
+              result={analyze.data}
+              onChangeIndustry={() => {
+                /* 상권 고정 — 업종 셀렉트로 유도 (변경 시 자동 재질의) */
+                document.querySelector<HTMLSelectElement>("aside select")?.focus();
+              }}
+              onChangeLocation={() => {
+                /* 업종 고정 — 상권 선택 해제 후 지도 클릭 대기 */
+                setSelectedCode(null);
+                setPickedPoint(null);
+              }}
+            />
+          ) : (
+            <IdleState mode={mode} />
+          )}
+        </div>
+
+        {/* 전역 면책 */}
+        <footer className="border-t border-line/60 px-6 py-2.5 text-center text-[10px] leading-relaxed text-faint">
+          본 데모의 모든 수치는 공공데이터 기반 추정·통계 참고 지표이며, 투자·창업 결정의 근거가 아닌 탐색 도구입니다.
+        </footer>
+      </aside>
     </div>
   );
 }
