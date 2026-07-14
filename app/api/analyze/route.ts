@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { AnalyzeRequest, AnalyzeResult, type DebugTrace } from "@/lib/contracts";
-import { analyzeViaModel, MODEL_SERVER_URL } from "@/lib/normalize";
+import { analyzeViaModel, analyzeViaFile, MODEL_SERVER_URL } from "@/lib/normalize";
 import { mockAnalyze } from "@/lib/mock";
 
 const MOCK_FALLBACK = process.env.MOCK_FALLBACK !== "false";
@@ -26,25 +26,31 @@ export async function POST(req: NextRequest) {
   try {
     const result = await analyzeViaModel(parsed);
     return NextResponse.json(AnalyzeResult.parse(result));
-  } catch (err) {
-    console.error("[/api/analyze] model server 호출 실패:", err);
-    if (MOCK_FALLBACK) {
-      // 목업 폴백에도 실패 원인 트레이스를 실어 인스펙터 콘솔에서 확인 가능하게
-      const trace: DebugTrace = (err as { trace?: DebugTrace })?.trace ?? {
-        externalUrl: `${MODEL_SERVER_URL}/predict`,
-        externalRequest: parsed,
-        externalResponse: null,
-        externalStatus: null,
-        externalDurationMs: 0,
-        error: err instanceof Error ? err.message : String(err),
-      };
-      const mocked = mockAnalyze(parsed);
-      mocked.debug = trace;
-      return NextResponse.json(AnalyzeResult.parse(mocked));
+  } catch (modelErr) {
+    // 1차 폴백: 정적 사전계산 값(실데이터) — 모델 서버 미연결(예: Vercel)에서도 동작
+    try {
+      const result = await analyzeViaFile(parsed);
+      return NextResponse.json(AnalyzeResult.parse(result));
+    } catch (fileErr) {
+      console.error("[/api/analyze] model·file 폴백 모두 실패:", modelErr, fileErr);
+      if (MOCK_FALLBACK) {
+        // 목업 폴백에도 실패 원인 트레이스를 실어 인스펙터 콘솔에서 확인 가능하게
+        const trace: DebugTrace = (modelErr as { trace?: DebugTrace })?.trace ?? {
+          externalUrl: `${MODEL_SERVER_URL}/predict`,
+          externalRequest: parsed,
+          externalResponse: null,
+          externalStatus: null,
+          externalDurationMs: 0,
+          error: modelErr instanceof Error ? modelErr.message : String(modelErr),
+        };
+        const mocked = mockAnalyze(parsed);
+        mocked.debug = trace;
+        return NextResponse.json(AnalyzeResult.parse(mocked));
+      }
+      return NextResponse.json(
+        { message: "일시적으로 분석 결과를 불러오지 못했습니다. 잠시 후 다시 시도해주세요." },
+        { status: 502 }
+      );
     }
-    return NextResponse.json(
-      { message: "일시적으로 분석 결과를 불러오지 못했습니다. 잠시 후 다시 시도해주세요." },
-      { status: 502 }
-    );
   }
 }

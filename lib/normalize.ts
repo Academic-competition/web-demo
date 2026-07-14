@@ -10,6 +10,7 @@
  */
 import fs from "node:fs/promises";
 import path from "node:path";
+import zlib from "node:zlib";
 
 import type {
   AnalyzeRequest,
@@ -24,8 +25,7 @@ const MODEL_TIMEOUT_MS = Number(process.env.MODEL_TIMEOUT_MS ?? 8000);
 
 /** 모델 레포의 배치 산출물(exports/) 위치 — 히트맵·메타의 1차 소스 */
 const EXPORTS_DIR =
-  process.env.MODEL_EXPORTS_DIR ??
-  path.resolve(process.cwd(), "..", "seoul-startup-opportunity-recommender", "exports");
+  process.env.MODEL_EXPORTS_DIR ?? path.join(process.cwd(), "model-exports");
 
 const REVENUE_DISCLAIMER =
   "카드 결제 기반 추정치를 재추정한 상권 간 비교용 참고 지표입니다. 절대 금액 보장이 아닙니다.";
@@ -100,7 +100,52 @@ export async function analyzeViaModel(req: AnalyzeRequest): Promise<AnalyzeResul
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(externalRequest),
   })) as { raw: any; trace: import("./contracts").DebugTrace };
+  return normalizeAnalyze(raw, req, "live", trace);
+}
 
+/**
+ * 정적 사전계산 값(model-exports/analyze/{업종}.json.gz)으로 분석 응답.
+ * 모델 서버가 없을 때(예: Vercel 배포)의 폴백 — 실측 데이터를 그대로 서빙한다.
+ * 나중에 MODEL_SERVER_URL 을 실서버로 지정하면 analyzeViaModel 이 우선 사용된다.
+ */
+export async function analyzeViaFile(req: AnalyzeRequest): Promise<AnalyzeResult> {
+  if (!/^[A-Za-z0-9]+$/.test(req.industryCode)) {
+    throw new Error(`잘못된 업종 코드: ${req.industryCode}`);
+  }
+  const file = path.join(EXPORTS_DIR, "analyze", `${req.industryCode}.json.gz`);
+  const started = Date.now();
+  const buf = await fs.readFile(file);
+  const table = JSON.parse(zlib.gunzipSync(buf).toString("utf-8")) as Record<string, any>;
+  const rawFromFile = table[String(req.sangwonCode)];
+  const durationMs = Date.now() - started;
+
+  const fileTrace: import("./contracts").DebugTrace = {
+    externalUrl: `file://${file}`,
+    externalRequest: { sangwonCode: req.sangwonCode, industryCode: req.industryCode },
+    externalResponse: rawFromFile
+      ? { note: "정적 사전계산 값 (모델 서버 미연결)", status: rawFromFile.status }
+      : { note: "해당 상권×업종 조합 없음", status: "insufficient_data" },
+    externalStatus: rawFromFile ? 200 : 404,
+    externalDurationMs: durationMs,
+    error: null,
+  };
+
+  const payload = rawFromFile ?? {
+    status: "insufficient_data",
+    sangwon: { code: req.sangwonCode },
+    industry: { code: req.industryCode },
+    meta: {},
+  };
+  return normalizeAnalyze(payload, req, "file", fileTrace);
+}
+
+/** 모델/파일 공통: 외부 raw 응답을 내부 계약(AnalyzeResult)으로 정규화 + grade/면책 주입 */
+function normalizeAnalyze(
+  raw: any,
+  req: AnalyzeRequest,
+  sourceMode: "live" | "file",
+  trace: import("./contracts").DebugTrace
+): AnalyzeResult {
   const sangwon = {
     code: Number(raw?.sangwon?.code ?? req.sangwonCode),
     name: raw?.sangwon?.name ?? null,
@@ -123,7 +168,7 @@ export async function analyzeViaModel(req: AnalyzeRequest): Promise<AnalyzeResul
   if (raw?.status !== "ok") {
     return {
       status: raw?.status === "insufficient_data" ? "insufficient_data" : "error",
-      sourceMode: "live",
+      sourceMode,
       sangwon,
       industry,
       survival: null,
@@ -139,7 +184,7 @@ export async function analyzeViaModel(req: AnalyzeRequest): Promise<AnalyzeResul
 
   return {
     status: "ok",
-    sourceMode: "live",
+    sourceMode,
     sangwon,
     industry,
     survival: Number.isFinite(probability)
