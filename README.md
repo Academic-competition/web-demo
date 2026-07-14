@@ -32,12 +32,65 @@ pnpm dev        # http://localhost:3000
 
 ## 아키텍처 (TECH_SPEC §2)
 
+두 저장소가 이렇게 맞물린다 (브라우저는 모델 서버를 직접 호출하지 않고 항상 `/api/*` 경유):
+
+```mermaid
+flowchart TB
+    User["사용자 · 지도 클릭 + 업종 선택"]
+
+    subgraph WEB["web-demo · Next.js 16 (플랫폼 컴포넌트)"]
+        direction TB
+        UI["브라우저 UI<br/>page.tsx · MapView · ResultPanel"]
+        RT["Route Handler<br/>/api/analyze · /api/heatmap · /api/meta"]
+        NORM["lib/normalize.ts — anti-corruption layer<br/>grade · 면책 · scaleNote 강제 주입"]
+        MOCK["lib/mock.ts<br/>목업 폴백"]
+    end
+
+    subgraph MODEL["seoul-startup-opportunity-recommender · 모델 서버"]
+        direction TB
+        SRV["FastAPI · api/server.py<br/>/predict · /meta/*"]
+        SERV["api/serving.py<br/>상권×업종 서빙 테이블"]
+        PKL["sales_model.pkl<br/>RandomForest 매출 예측"]
+        EXP["exports/*.json<br/>히트맵 · 메타 배치 산출물"]
+    end
+
+    CSV[("서울 열린데이터광장<br/>상권분석 CSV 4종")]
+
+    User --> UI --> RT --> NORM
+    NORM -->|"POST /predict (live)"| SRV
+    NORM -.->|"모델 다운 시"| MOCK
+    RT -.->|"히트맵 · 메타 파일"| EXP
+    SRV --> SERV --> PKL
+    SERV --> EXP
+    CSV --> SERV
 ```
-[브라우저] → /api/analyze · /api/heatmap · /api/meta   ← 내부 계약 (lib/contracts.ts 정본)
-                │ route handler = anti-corruption layer
-                │ zod 검증 → 모델 호출/파일 읽기 → normalize() → 고정 스키마
-                ▼
-[모델 서버 FastAPI]  +  [사전계산 히트맵 JSON (exports/)]
+
+**분석 요청 한 번의 여정** — 위치·업종을 넘기면 실측 데이터가 돌아온다:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor U as 사용자
+    participant B as 브라우저 page.tsx
+    participant R as Route /api/analyze
+    participant N as normalize.ts
+    participant M as 모델 서버 /predict
+    participant K as sales_model.pkl
+
+    U->>B: 지도 위치 클릭 + 업종 선택
+    B->>B: 좌표 → 최근접 상권 매핑 (geo.ts)
+    B->>R: POST {sangwonCode, industryCode}
+    R->>R: zod 검증 (contracts.ts)
+    R->>N: analyzeViaModel(req)
+    N->>M: POST /predict {sangwonCode, industryCode}
+    M->>K: 상권×업종 feature로 매출 예측
+    K-->>M: 예상 매출
+    M-->>N: survival·revenue·context·narrative (원천 수치)
+    N->>N: grade(신호등)·면책·scaleNote 주입
+    N-->>R: AnalyzeResult (sourceMode = live)
+    R-->>B: 고정 스키마 JSON
+    B-->>U: 결과 카드 (생존율·예상매출·해석)
+    Note over N,M: 모델 오류·타임아웃 시 mock.ts 폴백 (sourceMode = mock)
 ```
 
 - **내부 계약**: `lib/contracts.ts` (zod). grade(신호등) 판정·면책(disclaimer)·집계수준(scaleNote)은
