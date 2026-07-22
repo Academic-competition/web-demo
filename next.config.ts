@@ -7,6 +7,7 @@ const nextConfig: NextConfig = {
     "/api/analyze": ["./model-exports/**/*"],
     "/api/heatmap": ["./model-exports/**/*"],
     "/api/meta": ["./model-exports/**/*"],
+    "/api/top-industries": ["./model-exports/**/*"],
   },
 };
 
