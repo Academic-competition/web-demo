@@ -16,8 +16,9 @@ import ResultPanel, {
   IdleState,
   LoadingState,
 } from "@/components/ResultPanel";
+import TopIndustriesPanel from "@/components/TopIndustriesPanel";
 import { nearestSangwon, MAX_SNAP_METERS } from "@/lib/geo";
-import { useAnalyze, useHeatmap, useMeta } from "@/lib/hooks";
+import { useAnalyze, useHeatmap, useMeta, useTopIndustries } from "@/lib/hooks";
 import { inspect } from "@/lib/inspector";
 
 type Mode = "location" | "industry";
@@ -40,6 +41,8 @@ export default function Home() {
   const hasAnalyzedRef = useRef(false);
 
   const heatmap = useHeatmap(industryCode || null, mode === "industry");
+  // 지역 우선(위치 먼저): 상권을 고르면 그 상권의 업종 랭킹을 먼저 보여준다.
+  const topIndustries = useTopIndustries(mode === "location" ? selectedCode : null);
 
   const sangwons = meta.data?.sangwons ?? [];
   const industries = meta.data?.industries ?? [];
@@ -86,11 +89,10 @@ export default function Home() {
       );
       setBoundaryNotice(null);
       setSelectedCode(found.sangwon.code);
-      if (hasAnalyzedRef.current && industryCode) {
-        runAnalyze(found.sangwon.code, industryCode);
-      }
+      // 지역 우선 플로우: 새 위치를 고르면 이전 분석은 접고 그 상권의 업종 랭킹부터 보여준다.
+      analyze.reset();
     },
-    [sangwons, industryCode, runAnalyze]
+    [sangwons, analyze]
   );
 
   // ---- 업종 먼저: 히트맵 셀/리스트에서 상권 선택 → 즉시 분석 (UC-002) ----
@@ -118,8 +120,6 @@ export default function Home() {
     setMode(m);
     setBoundaryNotice(null);
   };
-
-  const canAnalyze = selectedCode != null && !!industryCode;
 
   return (
     <div className="flex h-full flex-col lg:flex-row">
@@ -184,23 +184,25 @@ export default function Home() {
 
         {/* 조건 입력 */}
         <div className="space-y-3 px-6 py-4">
-          <div>
-            <label className="mb-1.5 block text-[11px] font-medium text-muted">
-              업종 {mode === "industry" && <span className="text-gold">— 선택하면 히트맵이 그려집니다</span>}
-            </label>
-            <select
-              value={industryCode}
-              onChange={(e) => handleIndustryChange(e.target.value)}
-              className="w-full appearance-none rounded-lg border border-line bg-ink-800 px-3.5 py-2.5 text-sm text-fg outline-none focus:border-gold/60"
-            >
-              <option value="">업종을 선택하세요</option>
-              {industries.map((i) => (
-                <option key={i.code} value={i.code}>
-                  {i.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          {mode === "industry" && (
+            <div>
+              <label className="mb-1.5 block text-[11px] font-medium text-muted">
+                업종 <span className="text-gold">— 선택하면 히트맵이 그려집니다</span>
+              </label>
+              <select
+                value={industryCode}
+                onChange={(e) => handleIndustryChange(e.target.value)}
+                className="w-full appearance-none rounded-lg border border-line bg-ink-800 px-3.5 py-2.5 text-sm text-fg outline-none focus:border-gold/60"
+              >
+                <option value="">업종을 선택하세요</option>
+                {industries.map((i) => (
+                  <option key={i.code} value={i.code}>
+                    {i.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* 히트맵 색 기준 토글 (업종 먼저 모드) */}
           {mode === "industry" && industryCode && (
@@ -272,15 +274,11 @@ export default function Home() {
             </div>
           )}
 
-          {/* 분석하기 (위치 먼저 모드) */}
-          {mode === "location" && (
-            <button
-              onClick={() => canAnalyze && runAnalyze(selectedCode!, industryCode)}
-              disabled={!canAnalyze || analyze.isPending}
-              className="w-full rounded-xl bg-gold px-4 py-3 text-sm font-bold text-ink-950 transition enabled:hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-30"
-            >
-              {analyze.isPending ? "분석 중…" : "분석하기"}
-            </button>
+          {/* 위치 먼저 모드: 상권을 고르면 우측에 업종 랭킹이 뜨고, 업종을 누르면 분석됩니다 */}
+          {mode === "location" && selectedSangwon && (
+            <p className="rounded-lg border border-line/50 bg-ink-800/40 px-3.5 py-2 text-[11px] leading-relaxed text-muted">
+              아래에서 이 상권의 <span className="text-gold-soft">업종별 기회</span>를 확인하고 업종을 선택하세요.
+            </p>
           )}
         </div>
 
@@ -301,13 +299,27 @@ export default function Home() {
             <ResultPanel
               result={analyze.data}
               onChangeIndustry={() => {
-                /* 상권 고정 — 업종 셀렉트로 유도 (변경 시 자동 재질의) */
-                document.querySelector<HTMLSelectElement>("aside select")?.focus();
+                if (mode === "location") {
+                  /* 위치 고정 — 업종 랭킹으로 되돌아가 다른 업종 선택 */
+                  analyze.reset();
+                } else {
+                  /* 업종 셀렉트로 유도 (변경 시 자동 재질의) */
+                  document.querySelector<HTMLSelectElement>("aside select")?.focus();
+                }
               }}
               onChangeLocation={() => {
-                /* 업종 고정 — 상권 선택 해제 후 지도 클릭 대기 */
+                /* 다른 위치 — 선택 해제 후 지도 클릭 대기 */
                 setSelectedCode(null);
                 setPickedPoint(null);
+                analyze.reset();
+              }}
+            />
+          ) : mode === "location" && selectedCode != null ? (
+            <TopIndustriesPanel
+              state={topIndustries}
+              onPick={(code) => {
+                setIndustryCode(code);
+                runAnalyze(selectedCode!, code);
               }}
             />
           ) : (

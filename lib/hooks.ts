@@ -11,6 +11,7 @@ import type {
   AnalyzeResult,
   HeatmapResult,
   MetaResult,
+  TopIndustriesResult,
 } from "./contracts";
 import { inspect } from "./inspector";
 
@@ -107,6 +108,32 @@ export function useHeatmap(industryCode: string | null, enabled: boolean) {
       return data;
     },
     enabled: enabled && !!industryCode,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/** 지역 우선(위치 먼저): 선택한 상권의 업종별 요약·랭킹 */
+export function useTopIndustries(sangwonCode: number | null) {
+  return useQuery<TopIndustriesResult>({
+    queryKey: ["top-industries", sangwonCode],
+    queryFn: async () => {
+      inspect("req", `GET /api/top-industries?sangwonCode=${sangwonCode}`);
+      const started = Date.now();
+      const res = await fetch(`/api/top-industries?sangwonCode=${sangwonCode}`);
+      if (!res.ok) {
+        inspect("err", `상권 업종 랭킹 로드 실패 — HTTP ${res.status}`, undefined, Date.now() - started);
+        throw new Error("상권 업종 랭킹을 불러오지 못했습니다.");
+      }
+      const data: TopIndustriesResult = await res.json();
+      inspect(
+        "file",
+        `상권 업종 랭킹 — ${data.sangwon.name ?? sangwonCode} · ${data.industries.length}개 업종 (${data.sourceMode})`,
+        data.debug ?? { sourceMode: data.sourceMode, dataAsOf: data.dataAsOf },
+        Date.now() - started
+      );
+      return data;
+    },
+    enabled: sangwonCode != null,
     staleTime: 5 * 60 * 1000,
   });
 }

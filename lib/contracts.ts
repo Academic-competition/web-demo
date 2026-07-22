@@ -173,6 +173,47 @@ export const MetaResult = z.object({
 export type MetaResult = z.infer<typeof MetaResult>;
 
 // ------------------------------------------------------------------
+// 지역 우선 — 상권 내 업종 랭킹 (위치 먼저 플로우)
+//   위치를 먼저 고르면, 그 상권의 업종별 요약 통계를 먼저 보여주고
+//   사용자가 그걸 보고 업종을 선택하게 한다. grade는 서버(route)가 주입.
+// ------------------------------------------------------------------
+export const TopIndustry = z.object({
+  code: z.string(),
+  name: z.string().nullable(),
+  /** 상권×업종 전체 점포 합산 예상 월매출 */
+  monthlyEstimateKRW: z.number(),
+  /** 같은 업종 내 전체 상권 대비 백분위 (0~100) */
+  salesPercentile: z.number().min(0).max(100).nullable(),
+  survivalProbability: z.number().min(0).max(1).nullable(),
+  grade: Grade.nullable(),
+  storeCount: z.number().nullable(),
+  franchiseRatio: z.number().nullable(),
+  /** 이 상권 '안에서' 업종 간 상대 창업기회점수 (0~100) */
+  opportunityScore: z.number(),
+});
+export type TopIndustry = z.infer<typeof TopIndustry>;
+
+export const TopIndustriesResult = z.object({
+  sourceMode: SourceMode,
+  dataAsOf: z.string(),
+  survivalGranularity: z.string(),
+  sangwon: z.object({
+    code: z.number(),
+    name: z.string().nullable(),
+    category: z.string().nullable(),
+    gu: z.string().nullable(),
+    dong: z.string().nullable(),
+    lat: z.number().nullable(),
+    lon: z.number().nullable(),
+    /** 상권 단위 분기 유동인구 (업종 무관 동일) */
+    footTraffic: z.number().nullable(),
+  }),
+  industries: z.array(TopIndustry),
+  debug: DebugTrace.nullable().optional(),
+});
+export type TopIndustriesResult = z.infer<typeof TopIndustriesResult>;
+
+// ------------------------------------------------------------------
 // 신호등 판정 (서버 전용 — ANSWERS.md Q6 권장 문턱값)
 // ------------------------------------------------------------------
 export const GRADE_THRESHOLDS = { safe: 0.6, caution: 0.45 } as const;

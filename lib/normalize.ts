@@ -17,6 +17,7 @@ import type {
   AnalyzeResult,
   HeatmapResult,
   MetaResult,
+  TopIndustriesResult,
 } from "./contracts";
 import { gradeOf } from "./contracts";
 
@@ -240,6 +241,86 @@ function normalizeAnalyze(
     meta,
     debug: trace,
   };
+}
+
+// ------------------------------------------------------------------
+// 지역 우선 — 상권 내 업종 랭킹 (위치 먼저 플로우)
+//   grade는 여기서 gradeOf로 주입 (문턱값이 프론트에 흩어지지 않게 — analyze와 동일 원칙)
+// ------------------------------------------------------------------
+function packTopIndustries(
+  raw: any,
+  sourceMode: "live" | "file",
+  trace: import("./contracts").DebugTrace
+): TopIndustriesResult {
+  const sango = raw?.sangwon ?? {};
+  return {
+    sourceMode,
+    dataAsOf: String(raw?.dataAsOf ?? "unknown"),
+    survivalGranularity: String(raw?.survivalGranularity ?? "unknown"),
+    sangwon: {
+      code: Number(sango.code),
+      name: sango.name ?? null,
+      category: sango.category ?? null,
+      gu: sango.gu ?? null,
+      dong: sango.dong ?? null,
+      lat: sango.lat ?? null,
+      lon: sango.lon ?? null,
+      footTraffic: sango.footTraffic ?? null,
+    },
+    industries: (raw?.industries ?? []).map((it: any) => {
+      const sp = it.survivalProbability != null ? Number(it.survivalProbability) : null;
+      return {
+        code: String(it.code),
+        name: it.name ?? null,
+        monthlyEstimateKRW: Number(it.monthlyEstimateKRW ?? 0),
+        salesPercentile: it.salesPercentile != null ? Number(it.salesPercentile) : null,
+        survivalProbability: sp,
+        grade: sp != null ? gradeOf(sp) : null, // 신호등 판정은 플랫폼 책임
+        storeCount: it.storeCount != null ? Number(it.storeCount) : null,
+        franchiseRatio: it.franchiseRatio != null ? Number(it.franchiseRatio) : null,
+        opportunityScore: Number(it.opportunityScore ?? 0),
+      };
+    }),
+    debug: trace,
+  };
+}
+
+export async function topIndustriesViaModel(sangwonCode: number): Promise<TopIndustriesResult> {
+  const { raw, trace } = await fetchModelTraced(`/sangwon/${sangwonCode}/industries`, { sangwonCode });
+  return packTopIndustries(raw, "live", trace);
+}
+
+/** by-sangwon.json.gz 는 상권 수가 많아 한 번 읽고 모듈 메모리에 캐시한다. */
+let _bySangwonCache: Record<string, any> | null = null;
+async function loadBySangwon(): Promise<Record<string, any>> {
+  if (_bySangwonCache) return _bySangwonCache;
+  const file = path.join(EXPORTS_DIR, "by-sangwon.json.gz");
+  const buf = await fs.readFile(file);
+  _bySangwonCache = JSON.parse(zlib.gunzipSync(buf).toString("utf-8")) as Record<string, any>;
+  return _bySangwonCache;
+}
+
+export async function topIndustriesViaFile(sangwonCode: number): Promise<TopIndustriesResult> {
+  const started = Date.now();
+  const table = await loadBySangwon();
+  const raw = table[String(sangwonCode)];
+  const durationMs = Date.now() - started;
+  if (!raw) {
+    throw new Error(`by-sangwon: 상권 ${sangwonCode} 데이터 없음`);
+  }
+  const trace: import("./contracts").DebugTrace = {
+    externalUrl: `file://model-exports/by-sangwon.json.gz#${sangwonCode}`,
+    externalRequest: { sangwonCode },
+    externalResponse: {
+      note: "정적 사전계산 — 상권 내 업종 랭킹 (실시간 추론 없음)",
+      industryCount: raw.industryCount,
+      dataAsOf: raw.dataAsOf,
+    },
+    externalStatus: 200,
+    externalDurationMs: durationMs,
+    error: null,
+  };
+  return packTopIndustries(raw, "file", trace);
 }
 
 // ------------------------------------------------------------------
