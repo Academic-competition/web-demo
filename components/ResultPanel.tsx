@@ -61,9 +61,61 @@ const VERDICT: Record<Grade, { label: string; text: string; chip: string; ring: 
   },
 };
 
+/** 상권 내 업종 기회 순위 — 지역 랭킹(TopIndustries) 데이터에서 파생 (golmok '나의 등수' 패턴) */
+export type RankingContext = {
+  rank: number;
+  total: number;
+  opportunityScore: number;
+};
+
 // ------------------------------------------------------------------
 // 상태 화면들
 // ------------------------------------------------------------------
+/** 질문형 온보딩 — 기능 나열 대신 사용자 상황으로 분기 (golmok '창업하려는 업종이 있으세요?' 패턴) */
+export function OnboardingCard({
+  onPickLocation,
+  onPickIndustry,
+}: {
+  onPickLocation: () => void;
+  onPickIndustry: () => void;
+}) {
+  return (
+    <div className="rise-in rounded-xl border border-line/60 bg-ink-800/40 px-6 py-7">
+      <div className="text-[10px] uppercase tracking-[0.16em] text-faint">시작하기</div>
+      <h2 className="mt-1 font-[family-name:var(--font-display)] text-[19px] leading-snug text-fg">
+        창업하려는 <span className="text-gold">업종</span>이 정해져 있나요?
+      </h2>
+      <div className="mt-4 space-y-2">
+        <button
+          onClick={onPickLocation}
+          className="group w-full rounded-xl border border-line/70 bg-ink-700/40 px-4 py-3.5 text-left transition hover:border-gold/60 hover:bg-ink-700/70"
+        >
+          <div className="text-[14px] font-semibold text-fg transition group-hover:text-gold-soft">
+            아직이요 — 자리부터 볼래요
+          </div>
+          <div className="mt-0.5 text-[11px] leading-relaxed text-muted">
+            지도를 클릭하면 그 자리의 <b className="text-fg/80">유망 업종 순위</b>부터 보여드립니다
+          </div>
+        </button>
+        <button
+          onClick={onPickIndustry}
+          className="group w-full rounded-xl border border-line/70 bg-ink-700/40 px-4 py-3.5 text-left transition hover:border-gold/60 hover:bg-ink-700/70"
+        >
+          <div className="text-[14px] font-semibold text-fg transition group-hover:text-gold-soft">
+            네 — 업종이 있어요
+          </div>
+          <div className="mt-0.5 text-[11px] leading-relaxed text-muted">
+            업종을 고르면 <b className="text-fg/80">서울 전체 상권 적합도</b>를 히트맵으로 보여드립니다
+          </div>
+        </button>
+      </div>
+      <p className="mt-4 text-[10px] leading-relaxed text-faint">
+        어느 쪽이든 같은 분석 리포트로 이어집니다. 상단 토글로 언제든 바꿀 수 있어요.
+      </p>
+    </div>
+  );
+}
+
 export function IdleState({ mode }: { mode: "location" | "industry" }) {
   return (
     <div className="flex flex-col items-center gap-3 rounded-xl border border-line/60 bg-ink-800/40 px-6 py-12 text-center">
@@ -200,15 +252,30 @@ function StatTile({
   );
 }
 
+/** 종합 의견 불릿 한 줄 — [지표 태그] + 값·판단 문장 (golmok 종합의견 패턴) */
+function Bullet({ tag, children }: { tag: string; children: React.ReactNode }) {
+  return (
+    <li className="flex items-start gap-2">
+      <span className="mt-[3px] shrink-0 rounded border border-line/70 bg-ink-700/60 px-1.5 py-0.5 text-[9px] font-medium text-muted">
+        {tag}
+      </span>
+      <span className="text-[12px] leading-relaxed text-fg/90">{children}</span>
+    </li>
+  );
+}
+
 // ------------------------------------------------------------------
 // 메인 리포트
 // ------------------------------------------------------------------
 export default function ResultPanel({
   result,
+  rankingContext,
   onChangeIndustry,
   onChangeLocation,
 }: {
   result: AnalyzeResult;
+  /** 상권 내 업종 기회 순위 (지역 랭킹 데이터 보유 시) */
+  rankingContext?: RankingContext | null;
   onChangeIndustry: () => void;
   onChangeLocation: () => void;
 }) {
@@ -242,6 +309,11 @@ export default function ResultPanel({
   const grade = result.survival?.grade ?? null;
   const v = grade ? VERDICT[grade] : null;
   const pct = result.revenue?.percentileInSangwon ?? null;
+  // 유동인구 핵심 연령대 (종합 의견용) — ratio 스케일(0~1 / 0~100) 양쪽 허용
+  const topAge = result.context?.demographics?.length
+    ? [...result.context.demographics].sort((a, b) => b.ratio - a.ratio)[0]
+    : null;
+  const topAgePct = topAge ? (topAge.ratio <= 1 ? topAge.ratio * 100 : topAge.ratio) : 0;
 
   return (
     <div className="space-y-3.5">
@@ -305,6 +377,15 @@ export default function ResultPanel({
         {pct != null && (
           <StatTile label="동일업종 내" value={`상위 ${(100 - pct).toFixed(0)}%`} tone="text-gold" hint="예상매출 백분위" />
         )}
+        {rankingContext && (
+          <StatTile
+            label="상권 내 기회 순위"
+            value={`${rankingContext.rank}위`}
+            unit={`/ ${rankingContext.total}개 업종`}
+            tone="text-gold"
+            hint="창업기회점수 기준"
+          />
+        )}
         {result.context?.footTraffic && (
           <StatTile
             label="분기 유동인구"
@@ -314,9 +395,75 @@ export default function ResultPanel({
         )}
       </div>
 
-      {/* ── ① 생존 전망 ─────────────────────────────────── */}
+      {/* ── ① 종합 의견 — 지표별 값·판단 불릿 (golmok 패턴) ── */}
+      <Section n={1} title="종합 의견" aside="규칙 기반 요약">
+        <ul className="space-y-2">
+          {result.survival && v && (
+            <Bullet tag="생존">
+              3년 생존율 <b className={v.text}>{(result.survival.probability * 100).toFixed(0)}%</b>{" "}
+              <b className={v.text}>({v.label})</b> — {v.sentence}{" "}
+              <span className="text-muted">실측 폐업률 환산·업종 단위 통계입니다.</span>
+            </Bullet>
+          )}
+          {result.revenue && (
+            <Bullet tag="매출">
+              예상 월매출 <b className="text-fg">{formatKRW(result.revenue.monthlyEstimateKRW)}</b>
+              {pct != null && (
+                <>
+                  {" "}— 동일 업종 상권 중 <b className="text-gold">상위 {(100 - pct).toFixed(0)}%</b>
+                </>
+              )}
+              <span className="text-muted"> (상권×업종 합산 규모).</span>
+            </Bullet>
+          )}
+          {rankingContext && (
+            <Bullet tag="기회">
+              이 상권의 {rankingContext.total}개 업종 중 창업기회점수{" "}
+              <b className="text-gold">{rankingContext.rank}위</b>
+              <span className="text-muted">
+                {" "}(점수 {rankingContext.opportunityScore.toFixed(0)} — 상권 내 상대 지표).
+              </span>
+            </Bullet>
+          )}
+          {result.context?.competition?.storeCount != null && (
+            <Bullet tag="경쟁">
+              동일 업종 점포 <b className="text-fg">{result.context.competition.storeCount.toLocaleString()}개</b>
+              {result.context.competition.franchiseRatio != null && (
+                <> · 프랜차이즈 {(result.context.competition.franchiseRatio * 100).toFixed(0)}%</>
+              )}
+              {result.context.competition.granularity === "seoul_industry" ? (
+                <span className="text-muted"> (서울 전체 기준) — 경쟁 밀도를 함께 살펴보세요.</span>
+              ) : (
+                <span className="text-muted"> — 경쟁 밀도를 함께 살펴보세요.</span>
+              )}
+            </Bullet>
+          )}
+          {result.context?.footTraffic && (
+            <Bullet tag="인구">
+              분기 유동인구 <b className="text-fg">{formatPeople(result.context.footTraffic.total)}</b>
+              {topAge && (
+                <>
+                  {" "}— 핵심 연령대 <b className="text-fg">{topAge.ageBand}</b>
+                  <span className="text-muted"> ({topAgePct.toFixed(0)}%)</span>
+                </>
+              )}
+              .
+            </Bullet>
+          )}
+        </ul>
+        {result.narrative && (
+          <p className="mt-3 border-l-2 border-gold/40 pl-2.5 font-[family-name:var(--font-display)] text-[13.5px] leading-[1.7] text-fg/90">
+            {result.narrative.summary}
+            <span className="ml-1.5 text-[9px] text-faint">
+              — {result.narrative.generator === "rule_based" ? "규칙 기반 생성" : result.narrative.generator}
+            </span>
+          </p>
+        )}
+      </Section>
+
+      {/* ── ② 생존 전망 ─────────────────────────────────── */}
       {result.survival && (
-        <Section n={1} title="생존 전망 — 판단 기준">
+        <Section n={2} title="생존 전망 — 판단 기준">
           <div className="flex justify-center">
             <SurvivalGauge
               probability={result.survival.probability}
@@ -334,9 +481,9 @@ export default function ResultPanel({
         </Section>
       )}
 
-      {/* ── ② 예상 매출 ─────────────────────────────────── */}
+      {/* ── ③ 예상 매출 ─────────────────────────────────── */}
       {result.revenue && (
-        <Section n={2} title="예상 매출 — 참고 지표">
+        <Section n={3} title="예상 매출 — 참고 지표">
           <div className="flex items-end justify-between gap-3">
             <div>
               <div className="text-[30px] font-semibold leading-none text-fg" style={{ fontFamily: "var(--font-numeric)" }}>
@@ -366,9 +513,9 @@ export default function ResultPanel({
         </Section>
       )}
 
-      {/* ── ③ 상권 지표 ─────────────────────────────────── */}
+      {/* ── ④ 상권 지표 ─────────────────────────────────── */}
       {result.context && (
-        <Section n={3} title="상권 지표">
+        <Section n={4} title="상권 지표">
           <div className="mb-3 grid grid-cols-2 gap-3">
             {result.context.footTraffic && (
               <div className="rounded-lg bg-ink-700/50 px-3 py-2.5">
@@ -402,15 +549,6 @@ export default function ResultPanel({
               <DemographicsChart data={result.context.demographics} />
             </>
           )}
-        </Section>
-      )}
-
-      {/* ── ④ 종합 해석 ─────────────────────────────────── */}
-      {result.narrative && (
-        <Section n={4} title="종합 해석" aside={result.narrative.generator === "rule_based" ? "규칙 기반" : result.narrative.generator}>
-          <p className="font-[family-name:var(--font-display)] text-[15px] leading-[1.75] text-fg/95">
-            {result.narrative.summary}
-          </p>
         </Section>
       )}
 

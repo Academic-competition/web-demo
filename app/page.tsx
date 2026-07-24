@@ -7,7 +7,7 @@
  *  - 업종 먼저(UC-002): 업종 선택 → 히트맵 → 상권 클릭 → 분석
  *  - 재탐색(UC-003): 결과 이후 조건 변경 시 자동 재질의
  */
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 import InspectorConsole from "@/components/InspectorConsole";
 import MapView, { type HeatmapMetric } from "@/components/MapView";
@@ -15,6 +15,7 @@ import ResultPanel, {
   ErrorState,
   IdleState,
   LoadingState,
+  OnboardingCard,
 } from "@/components/ResultPanel";
 import TopIndustriesPanel from "@/components/TopIndustriesPanel";
 import { nearestSangwon, MAX_SNAP_METERS } from "@/lib/geo";
@@ -28,6 +29,8 @@ export default function Home() {
   const analyze = useAnalyze();
 
   const [mode, setMode] = useState<Mode>("location");
+  /** 질문형 온보딩에 응답했는지 — 응답 전까지만 시작 카드를 보여준다 */
+  const [onboarded, setOnboarded] = useState(false);
   const [industryCode, setIndustryCode] = useState<string>("");
   const [selectedCode, setSelectedCode] = useState<number | null>(null);
   const [pickedPoint, setPickedPoint] = useState<{ lat: number; lng: number } | null>(null);
@@ -41,8 +44,24 @@ export default function Home() {
   const hasAnalyzedRef = useRef(false);
 
   const heatmap = useHeatmap(industryCode || null, mode === "industry");
-  // 지역 우선(위치 먼저): 상권을 고르면 그 상권의 업종 랭킹을 먼저 보여준다.
-  const topIndustries = useTopIndustries(mode === "location" ? selectedCode : null);
+  // 상권 업종 랭킹 — 위치 먼저 모드의 중간 단계이자, 리포트의 '상권 내 기회 순위' 소스.
+  // 업종 먼저 모드에서도 상권이 정해지면 순위 맥락을 위해 로드한다 (파일 캐시라 가벼움).
+  const topIndustries = useTopIndustries(selectedCode);
+
+  // golmok '나의 등수' 패턴: 선택 업종이 이 상권의 업종 중 기회점수 몇 위인지
+  const rankingContext = useMemo(() => {
+    const ranking = topIndustries.data;
+    const res = analyze.data;
+    if (!ranking || !res || ranking.sangwon.code !== res.sangwon.code) return null;
+    const sorted = [...ranking.industries].sort((a, b) => b.opportunityScore - a.opportunityScore);
+    const idx = sorted.findIndex((i) => i.code === res.industry.code);
+    if (idx < 0) return null;
+    return {
+      rank: idx + 1,
+      total: sorted.length,
+      opportunityScore: sorted[idx].opportunityScore,
+    };
+  }, [topIndustries.data, analyze.data]);
 
   const sangwons = meta.data?.sangwons ?? [];
   const industries = meta.data?.industries ?? [];
@@ -298,6 +317,7 @@ export default function Home() {
           ) : analyze.data ? (
             <ResultPanel
               result={analyze.data}
+              rankingContext={rankingContext}
               onChangeIndustry={() => {
                 if (mode === "location") {
                   /* 위치 고정 — 업종 랭킹으로 되돌아가 다른 업종 선택 */
@@ -320,6 +340,22 @@ export default function Home() {
               onPick={(code) => {
                 setIndustryCode(code);
                 runAnalyze(selectedCode!, code);
+              }}
+            />
+          ) : !onboarded && selectedCode == null && !industryCode && !pickedPoint && !hasAnalyzedRef.current ? (
+            /* 첫 진입: 기능 나열 대신 질문으로 시작 (golmok 온보딩 패턴) */
+            <OnboardingCard
+              onPickLocation={() => {
+                setOnboarded(true);
+                switchMode("location");
+              }}
+              onPickIndustry={() => {
+                setOnboarded(true);
+                switchMode("industry");
+                setTimeout(
+                  () => document.querySelector<HTMLSelectElement>("aside select")?.focus(),
+                  80
+                );
               }}
             />
           ) : (
