@@ -74,3 +74,56 @@ export function incomeDecileRange(decile: number): string {
   const base = 180 + (decile - 1) * 45; // 만원 단위 대략치
   return `월 ${base.toLocaleString()}~${(base + 45).toLocaleString()}만원대`;
 }
+
+// ------------------------------------------------------------------
+// 치안 참고 '예시 데이터' — crime.csv 미보유 시 폴백 (SafetyDetail과 동일 형태)
+// ------------------------------------------------------------------
+export type SafetyMock = {
+  year: string;
+  guName: string | null;
+  totalIncidents: number;
+  byType: { label: string; count: number }[];
+  rankAmongGus: number;
+  guCount: number;
+  seoulAvgIncidents: number;
+  per100k: number;
+  granularity: "gu";
+};
+
+/** 문자열 → 32bit 시드 (자치구명 기반 결정적 생성) */
+function hashSeed(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+export function mockSafety(guName: string | null): SafetyMock {
+  const rand = mulberry32(hashSeed(guName ?? "서울"));
+  // 5대 범죄 연간 발생 — 절도·폭력이 대부분, 살인·강도는 극소 (자치구 규모의 그럴듯한 범위)
+  const theft = Math.round(1200 + rand() * 2600);
+  const violence = Math.round(1100 + rand() * 2300);
+  const sexual = Math.round(120 + rand() * 380);
+  const robbery = Math.round(2 + rand() * 10);
+  const murder = Math.round(rand() * 4);
+  const total = theft + violence + sexual + robbery + murder;
+  return {
+    year: "예시",
+    guName,
+    totalIncidents: total,
+    byType: [
+      { label: "살인", count: murder },
+      { label: "강도", count: robbery },
+      { label: "성범죄", count: sexual },
+      { label: "절도", count: theft },
+      { label: "폭력", count: violence },
+    ],
+    rankAmongGus: 1 + Math.floor(rand() * 25),
+    guCount: 25,
+    seoulAvgIncidents: Math.round(total * (0.85 + rand() * 0.3)),
+    per100k: Math.round(700 + rand() * 700),
+    granularity: "gu",
+  };
+}

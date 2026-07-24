@@ -11,7 +11,7 @@
  */
 import type { AnalyzeResult, Grade, RatioSlice } from "@/lib/contracts";
 import { formatKRW, formatKRWCompact, formatPeople, pctChange } from "@/lib/format";
-import { incomeDecileRange, mockHinterland } from "@/lib/mockExtras";
+import { incomeDecileRange, mockHinterland, mockSafety } from "@/lib/mockExtras";
 import SurvivalGauge from "./SurvivalGauge";
 import DemographicsChart from "./DemographicsChart";
 import {
@@ -795,8 +795,80 @@ export default function ResultPanel({
         </Section>
       )}
 
-      {/* ── ⑥ 배후지 분석 — 예시 데이터 (실데이터 미보유) ── */}
-      <Section n={6} title="배후지 분석" aside="주거·직장·소득·임대">
+      {/* ── ⑥ 치안 참고 — 자치구 5대 범죄 (기회점수 미반영) ── */}
+      {(() => {
+        const real = detail?.safety ?? null;
+        const s = real ?? mockSafety(result.sangwon.gu);
+        const vsSeoul =
+          s.totalIncidents != null && s.seoulAvgIncidents
+            ? pctChange(s.totalIncidents, s.seoulAvgIncidents)
+            : null;
+        return (
+          <Section n={6} title="치안 참고" aside="자치구 단위 · 5대 범죄">
+            {real ? (
+              <div className="mb-3 flex items-center gap-1.5 text-[10px] text-faint">
+                <span className="rounded border border-line bg-ink-700/60 px-1.5 py-px font-medium text-muted">
+                  실측 통계
+                </span>
+                경찰청 5대 범죄 발생 현황 · {s.year}년 · {s.guName ?? "자치구"} 기준
+              </div>
+            ) : (
+              <div className="mb-3 rounded-md border border-caution/40 bg-caution/10 px-2.5 py-2 text-[10px] leading-relaxed text-caution">
+                ⚠ 예시 데이터 — 범죄 통계 CSV(자치구별 5대 범죄) 미보유로 자치구명 기반 가상
+                수치를 표시합니다. 실데이터 연동 시 경찰청 연간 통계로 대체됩니다.
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-lg bg-ink-700/50 px-3 py-2.5">
+                <div className="text-[10px] text-faint">연간 5대 범죄 발생</div>
+                <div className="mt-0.5 text-base font-semibold text-fg" style={{ fontFamily: "var(--font-numeric)" }}>
+                  {s.totalIncidents != null ? `${s.totalIncidents.toLocaleString()}건` : "―"}
+                </div>
+                {vsSeoul != null && (
+                  <div className="mt-0.5 text-[10px] text-muted">
+                    서울 자치구 평균 대비{" "}
+                    <b className={vsSeoul <= 0 ? "text-safe" : "text-caution"}>
+                      {vsSeoul > 0 ? "+" : ""}
+                      {vsSeoul.toFixed(0)}%
+                    </b>
+                  </div>
+                )}
+              </div>
+              <div className="rounded-lg bg-ink-700/50 px-3 py-2.5">
+                <div className="text-[10px] text-faint">발생 적은 순</div>
+                <div className="mt-0.5 text-base font-semibold text-fg" style={{ fontFamily: "var(--font-numeric)" }}>
+                  {s.rankAmongGus != null ? `${s.rankAmongGus}위` : "―"}
+                  <span className="text-xs text-muted"> / {s.guCount ?? 25}개 구</span>
+                </div>
+                {s.per100k != null && (
+                  <div className="mt-0.5 text-[10px] text-muted">
+                    인구 10만명당 {s.per100k.toLocaleString()}건
+                  </div>
+                )}
+              </div>
+            </div>
+            {s.byType && s.byType.length > 0 && (
+              <SubBlock title="죄종별 발생" aside="절도·폭력이 대부분을 차지합니다">
+                <CompareBars
+                  rows={s.byType.map((t: { label: string; count: number }) => ({
+                    label: t.label,
+                    value: t.count,
+                  }))}
+                  format={(v) => `${Math.round(v).toLocaleString()}건`}
+                />
+              </SubBlock>
+            )}
+            <p className="mt-3 text-[9.5px] leading-relaxed text-faint">
+              자치구 단위 통계로 상권·골목별 차이는 반영되지 않으며, 체감 치안과 다를 수
+              있습니다. 이 지표는 참고용으로만 제공되고{" "}
+              <b className="text-muted">창업기회점수에는 반영되지 않습니다</b>.
+            </p>
+          </Section>
+        );
+      })()}
+
+      {/* ── ⑦ 배후지 분석 — 예시 데이터 (실데이터 미보유) ── */}
+      <Section n={7} title="배후지 분석" aside="주거·직장·소득·임대">
         <div className="mb-3 rounded-md border border-caution/40 bg-caution/10 px-2.5 py-2 text-[10px] leading-relaxed text-caution">
           ⚠ 예시 데이터 — 아래 수치는 실데이터 미보유 항목의 UI 시연용으로, 상권 코드 기반으로
           생성한 가상 값입니다. 실제 상권 특성과 무관하며, 실서비스에서는 상주인구·직장인구·
@@ -849,8 +921,8 @@ export default function ResultPanel({
         </SubBlock>
       </Section>
 
-      {/* ── ⑦ 유의사항 · 한계 ───────────────────────────── */}
-      <Section n={7} title="유의사항 · 한계">
+      {/* ── ⑧ 유의사항 · 한계 ───────────────────────────── */}
+      <Section n={8} title="유의사항 · 한계">
         <ul className="space-y-1.5 text-[11px] leading-relaxed text-muted">
           {result.survival?.granularity === "seoul_industry" && (
             <li className="flex gap-1.5">
@@ -872,7 +944,12 @@ export default function ResultPanel({
           )}
           <li className="flex gap-1.5">
             <span className="text-faint">·</span>
-            <b className="text-caution/90">배후지 분석(⑥)은 예시 데이터</b>로, 실제 상권 특성과 무관합니다 (실데이터셋 연동 전 UI 시연용).
+            치안 참고(⑥)는 <b className="text-fg/80">자치구 단위</b> 경찰청 통계로 상권별 차이를 반영하지 않으며,{" "}
+            <b className="text-fg/80">창업기회점수에 반영되지 않습니다</b>. 지역에 대한 단정적 판단의 근거로 사용하지 마세요.
+          </li>
+          <li className="flex gap-1.5">
+            <span className="text-faint">·</span>
+            <b className="text-caution/90">배후지 분석(⑦)은 예시 데이터</b>로, 실제 상권 특성과 무관합니다 (실데이터셋 연동 전 UI 시연용).
           </li>
           <li className="flex gap-1.5">
             <span className="text-faint">·</span>
@@ -881,9 +958,9 @@ export default function ResultPanel({
         </ul>
       </Section>
 
-      {/* ── ⑧ 데이터 출처 ───────────────────────────────── */}
+      {/* ── ⑨ 데이터 출처 ───────────────────────────────── */}
       {result.meta.sources.length > 0 && (
-        <Section n={8} title="데이터 출처">
+        <Section n={9} title="데이터 출처">
           <ul className="space-y-0.5">
             {result.meta.sources.map((s) => (
               <li key={s} className="text-[10.5px] leading-relaxed text-faint">

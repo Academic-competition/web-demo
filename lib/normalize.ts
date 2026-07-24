@@ -212,6 +212,24 @@ function packDetail(raw: any): AnalyzeResult["detail"] {
           note: String(raw.comparison.note ?? ""),
         }
       : null,
+    safety: raw.safety
+      ? {
+          year: String(raw.safety.year ?? "unknown"),
+          guName: raw.safety.guName ?? null,
+          totalIncidents: num(raw.safety.totalIncidents),
+          byType: Array.isArray(raw.safety.byType)
+            ? raw.safety.byType.map((t: any) => ({
+                label: String(t.label),
+                count: Number(t.count ?? 0),
+              }))
+            : null,
+          rankAmongGus: num(raw.safety.rankAmongGus),
+          guCount: num(raw.safety.guCount),
+          seoulAvgIncidents: num(raw.safety.seoulAvgIncidents),
+          per100k: num(raw.safety.per100k),
+          granularity: String(raw.safety.granularity ?? "gu"),
+        }
+      : null,
   };
 }
 

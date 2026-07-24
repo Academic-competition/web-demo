@@ -162,11 +162,30 @@ export const ComparisonDetail = z.object({
 });
 export type ComparisonDetail = z.infer<typeof ComparisonDetail>;
 
+/** 치안 참고 — 자치구 5대 범죄 (경찰청 통계, 기회점수 미반영 표시 전용) */
+export const SafetyDetail = z.object({
+  year: z.string(),
+  guName: z.string().nullable(),
+  totalIncidents: z.number().nullable(),
+  byType: z.array(z.object({ label: z.string(), count: z.number() })).nullable(),
+  /** 발생 건수 적은 순 순위 (1 = 서울 자치구 중 가장 적음) */
+  rankAmongGus: z.number().nullable(),
+  guCount: z.number().nullable(),
+  seoulAvgIncidents: z.number().nullable(),
+  /** 주민등록인구 10만명당 발생 (인구 파일 있을 때만) */
+  per100k: z.number().nullable(),
+  /** "gu" — 자치구 단위(상권별 차이 미반영) */
+  granularity: z.string(),
+});
+export type SafetyDetail = z.infer<typeof SafetyDetail>;
+
 export const AnalyzeDetail = z.object({
   sales: SalesDetail.nullable(),
   store: StoreDetail.nullable(),
   footTraffic: FootTrafficDetail.nullable(),
   comparison: ComparisonDetail.nullable(),
+  /** crime.csv 로드 시에만 존재 — 없으면 웹이 '예시 데이터'로 폴백 */
+  safety: SafetyDetail.nullable().optional(),
 });
 export type AnalyzeDetail = z.infer<typeof AnalyzeDetail>;
 
