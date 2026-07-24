@@ -9,24 +9,36 @@
  *
  * 상태: idle / loading(단계형) / insufficient_data(UC-004) / error(UC-006) / ok
  */
-import type { AnalyzeResult, Grade } from "@/lib/contracts";
+import type { AnalyzeResult, Grade, RatioSlice } from "@/lib/contracts";
+import { formatKRW, formatKRWCompact, formatPeople, pctChange } from "@/lib/format";
+import { incomeDecileRange, mockHinterland } from "@/lib/mockExtras";
 import SurvivalGauge from "./SurvivalGauge";
 import DemographicsChart from "./DemographicsChart";
+import {
+  CompareBars,
+  DeltaBadge,
+  GenderSplit,
+  SliceBarChart,
+  TrendChart,
+} from "./DetailCharts";
 
 // ------------------------------------------------------------------
 // 포맷터 / 상수
 // ------------------------------------------------------------------
-function formatKRW(v: number): string {
-  if (v >= 1e8) return `${(v / 1e8).toFixed(1)}억 원`;
-  if (v >= 1e4) return `${Math.round(v / 1e4).toLocaleString()}만 원`;
-  return `${v.toLocaleString()}원`;
+/** 비중 배열에서 최댓값 슬라이스 (한 줄 요약용) */
+function topOf(arr?: RatioSlice[] | null): RatioSlice | null {
+  if (!arr || !arr.length) return null;
+  return arr.reduce((a, b) => (b.ratio > a.ratio ? b : a));
 }
 
-/** 유동인구: 만 단위 이상은 "N만 명", 미만은 실제 수치로 (0만으로 뭉개지 않게 — 정직성) */
-function formatPeople(v: number): string {
-  if (v >= 1e4) return `${(v / 1e4).toFixed(0)}만 명`;
-  return `${Math.round(v).toLocaleString()}명`;
-}
+/** 유동인구 축약 (차트 라벨용) */
+const formatPeopleCompact = (v: number) =>
+  v >= 1e4 ? `${Math.round(v / 1e4)}만` : Math.round(v).toLocaleString();
+
+/** 연령 밴드 한글 라벨 (한 줄 요약용 — 차트 내부 라벨은 DetailCharts가 처리) */
+const AGE_KO: Record<string, string> = {
+  "10s": "10대", "20s": "20대", "30s": "30대", "40s": "40대", "50s": "50대", "60s+": "60대 이상",
+};
 
 const CONFIDENCE_LABEL = { high: "높음", medium: "보통", low: "낮음" } as const;
 
@@ -252,6 +264,27 @@ function StatTile({
   );
 }
 
+/** 상세 섹션 내부 소제목 블록 */
+function SubBlock({
+  title,
+  aside,
+  children,
+}: {
+  title: string;
+  aside?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="mt-3">
+      <div className="mb-1 flex items-baseline justify-between gap-2">
+        <div className="text-[10px] font-medium text-faint">{title}</div>
+        {aside && <div className="text-[9.5px] text-faint/80">{aside}</div>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
 /** 종합 의견 불릿 한 줄 — [지표 태그] + 값·판단 문장 (golmok 종합의견 패턴) */
 function Bullet({ tag, children }: { tag: string; children: React.ReactNode }) {
   return (
@@ -314,6 +347,11 @@ export default function ResultPanel({
     ? [...result.context.demographics].sort((a, b) => b.ratio - a.ratio)[0]
     : null;
   const topAgePct = topAge ? (topAge.ratio <= 1 ? topAge.ratio * 100 : topAge.ratio) : 0;
+
+  // 상세 분석(실측 원천값) — 목업 폴백에는 없음 (섹션 자동 생략)
+  const detail = result.detail ?? null;
+  // 배후지 '예시 데이터' — 상권 코드 기반 결정적 생성 (⑥ 섹션에 배지로 명시)
+  const hinterland = mockHinterland(result.sangwon.code);
 
   return (
     <div className="space-y-3.5">
@@ -414,6 +452,19 @@ export default function ResultPanel({
                 </>
               )}
               <span className="text-muted"> (상권×업종 합산 규모).</span>
+              {(() => {
+                const chg = pctChange(detail?.sales?.monthlyTotalKRW ?? null, detail?.sales?.prev ?? null);
+                if (chg == null || Math.abs(chg) < 0.05) return null;
+                return (
+                  <>
+                    {" "}실측 기준 전분기 대비{" "}
+                    <b className={chg > 0 ? "text-safe" : "text-risk"}>
+                      {chg > 0 ? "▲" : "▼"} {Math.abs(chg).toFixed(1)}%
+                    </b>
+                    .
+                  </>
+                );
+              })()}
             </Bullet>
           )}
           {rankingContext && (
@@ -481,9 +532,16 @@ export default function ResultPanel({
         </Section>
       )}
 
-      {/* ── ③ 예상 매출 ─────────────────────────────────── */}
+      {/* ── ③ 매출 분석 — 모델 예측 + 실측 집계 ──────────── */}
       {result.revenue && (
-        <Section n={3} title="예상 매출 — 참고 지표">
+        <Section n={3} title="매출 분석">
+          {/* (a) 모델 예측 */}
+          <div className="mb-1.5 flex items-center gap-1.5 text-[10px] text-faint">
+            <span className="rounded border border-gold/40 bg-gold/10 px-1.5 py-px font-medium text-gold-soft">
+              모델 예측
+            </span>
+            학습된 회귀 모델({result.meta.dataAsOf} 입력)의 추정치
+          </div>
           <div className="flex items-end justify-between gap-3">
             <div>
               <div className="text-[30px] font-semibold leading-none text-fg" style={{ fontFamily: "var(--font-numeric)" }}>
@@ -510,50 +568,289 @@ export default function ResultPanel({
           <p className="mt-3 border-l-2 border-caution/50 pl-2 text-[11px] leading-relaxed text-muted">
             {result.revenue.disclaimer}
           </p>
+
+          {/* (b) 실측 집계 (카드 추정 원천값) */}
+          {detail?.sales && (
+            <div className="mt-4 border-t border-line/40 pt-3">
+              <div className="mb-2 flex items-center gap-1.5 text-[10px] text-faint">
+                <span className="rounded border border-line bg-ink-700/60 px-1.5 py-px font-medium text-muted">
+                  실측 집계
+                </span>
+                카드 결제 기반 추정 원천값 · {result.meta.dataAsOf}
+              </div>
+              {detail.sales.monthlyTotalKRW != null && (
+                <div className="flex items-end justify-between gap-3">
+                  <div>
+                    <div className="text-[10px] text-faint">분기 월평균 매출 (상권×업종 합산)</div>
+                    <div className="mt-0.5 text-xl font-semibold text-fg" style={{ fontFamily: "var(--font-numeric)" }}>
+                      {formatKRW(detail.sales.monthlyTotalKRW)}
+                    </div>
+                  </div>
+                  {detail.sales.perStoreKRW != null && (
+                    <div className="shrink-0 text-right">
+                      <div className="text-[10px] text-faint">점포당</div>
+                      <div className="text-sm font-semibold text-fg/90" style={{ fontFamily: "var(--font-numeric)" }}>
+                        {formatKRW(detail.sales.perStoreKRW)}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                <DeltaBadge current={detail.sales.monthlyTotalKRW} base={detail.sales.prev} label="전분기" />
+                <DeltaBadge current={detail.sales.monthlyTotalKRW} base={detail.sales.yoy} label="전년 동분기" />
+              </div>
+
+              {detail.sales.trend.length > 1 && (
+                <SubBlock title="분기 매출 추이" aside="실측 카드 추정 · 단위: 원">
+                  <TrendChart data={detail.sales.trend} format={formatKRWCompact} />
+                </SubBlock>
+              )}
+              {detail.sales.byDay && (
+                <SubBlock
+                  title="요일별 매출"
+                  aside={topOf(detail.sales.byDay) && (
+                    <><b className="text-gold-soft">{topOf(detail.sales.byDay)!.label}요일</b> {(topOf(detail.sales.byDay)!.ratio * 100).toFixed(1)}% 최고</>
+                  )}
+                >
+                  <SliceBarChart data={detail.sales.byDay} />
+                </SubBlock>
+              )}
+              {detail.sales.byTime && (
+                <SubBlock
+                  title="시간대별 매출"
+                  aside={topOf(detail.sales.byTime) && (
+                    <><b className="text-gold-soft">{topOf(detail.sales.byTime)!.label}시</b> {(topOf(detail.sales.byTime)!.ratio * 100).toFixed(1)}% 최고</>
+                  )}
+                >
+                  <SliceBarChart data={detail.sales.byTime} />
+                </SubBlock>
+              )}
+              {detail.sales.byGender && (
+                <SubBlock title="성별 매출">
+                  <GenderSplit data={detail.sales.byGender} />
+                </SubBlock>
+              )}
+              {detail.sales.byAge && (
+                <SubBlock
+                  title="연령대별 매출"
+                  aside={topOf(detail.sales.byAge) && (
+                    <><b className="text-gold-soft">{AGE_KO[topOf(detail.sales.byAge)!.label] ?? topOf(detail.sales.byAge)!.label}</b> 소비 최다</>
+                  )}
+                >
+                  <SliceBarChart data={detail.sales.byAge} />
+                </SubBlock>
+              )}
+            </div>
+          )}
         </Section>
       )}
 
-      {/* ── ④ 상권 지표 ─────────────────────────────────── */}
-      {result.context && (
-        <Section n={4} title="상권 지표">
-          <div className="mb-3 grid grid-cols-2 gap-3">
-            {result.context.footTraffic && (
+      {/* ── ④ 업종·경쟁 분석 ────────────────────────────── */}
+      {(result.context?.competition || detail?.store || detail?.comparison) && (
+        <Section n={4} title="업종·경쟁 분석">
+          <div className="grid grid-cols-2 gap-2">
+            {result.context?.competition?.storeCount != null && (
               <div className="rounded-lg bg-ink-700/50 px-3 py-2.5">
-                <div className="text-[10px] text-faint">분기 유동인구 (상권)</div>
-                <div className="mt-0.5 text-base font-semibold text-fg" style={{ fontFamily: "var(--font-numeric)" }}>
-                  {formatPeople(result.context.footTraffic.total)}
-                </div>
-              </div>
-            )}
-            {result.context.competition?.storeCount != null && (
-              <div className="rounded-lg bg-ink-700/50 px-3 py-2.5">
-                <div className="text-[10px] text-faint">
-                  동일 업종 점포
-                  {result.context.competition.granularity === "seoul_industry" && " (서울 전체)"}
-                </div>
+                <div className="text-[10px] text-faint">동일 업종 점포</div>
                 <div className="mt-0.5 text-base font-semibold text-fg" style={{ fontFamily: "var(--font-numeric)" }}>
                   {result.context.competition.storeCount.toLocaleString()}
                   <span className="text-xs text-muted">개</span>
-                  {result.context.competition.franchiseRatio != null && (
-                    <span className="ml-1.5 text-[10px] text-muted">
-                      프랜차이즈 {(result.context.competition.franchiseRatio * 100).toFixed(0)}%
-                    </span>
-                  )}
+                </div>
+                {detail?.store?.franchiseCount != null && (
+                  <div className="mt-0.5 text-[10px] text-muted">
+                    프랜차이즈 {detail.store.franchiseCount.toLocaleString()} · 일반{" "}
+                    {detail.store.generalCount?.toLocaleString() ?? "―"}
+                  </div>
+                )}
+              </div>
+            )}
+            {detail?.store && (detail.store.openCount != null || detail.store.closeCount != null) && (
+              <div className="rounded-lg bg-ink-700/50 px-3 py-2.5">
+                <div className="text-[10px] text-faint">이번 분기 개·폐업</div>
+                <div className="mt-0.5 text-base font-semibold" style={{ fontFamily: "var(--font-numeric)" }}>
+                  <span className="text-safe">+{detail.store.openCount ?? 0}</span>
+                  <span className="mx-1 text-faint">/</span>
+                  <span className="text-risk">-{detail.store.closeCount ?? 0}</span>
+                </div>
+                <div className="mt-0.5 text-[10px] text-muted">
+                  개업률 {detail.store.openRate != null ? `${detail.store.openRate.toFixed(1)}%` : "―"} · 폐업률{" "}
+                  {detail.store.closeRate != null ? `${detail.store.closeRate.toFixed(1)}%` : "―"}
                 </div>
               </div>
             )}
           </div>
-          {result.context.demographics.length > 0 && (
+
+          {detail?.store && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              <DeltaBadge
+                current={detail.store.trend.length ? detail.store.trend[detail.store.trend.length - 1].value : null}
+                base={detail.store.prev}
+                label="점포수 전분기"
+              />
+              <DeltaBadge
+                current={detail.store.trend.length ? detail.store.trend[detail.store.trend.length - 1].value : null}
+                base={detail.store.yoy}
+                label="전년 동분기"
+              />
+            </div>
+          )}
+
+          {detail?.store && detail.store.trend.length > 1 && (
+            <SubBlock title="점포수 추이" aside="단위: 개">
+              <TrendChart data={detail.store.trend} format={(v) => `${Math.round(v).toLocaleString()}개`} />
+            </SubBlock>
+          )}
+
+          {detail?.comparison && (
             <>
-              <div className="mb-1 text-[10px] text-faint">유동인구 연령 구성</div>
-              <DemographicsChart data={result.context.demographics} />
+              <SubBlock title="동일 업종 점포수 비교">
+                <CompareBars
+                  rows={[
+                    { label: "이 상권", value: detail.comparison.storeCount.sangwon, highlight: true },
+                    { label: detail.comparison.guName ?? "자치구", value: detail.comparison.storeCount.gu },
+                    { label: "서울 전체", value: detail.comparison.storeCount.seoul },
+                  ]}
+                  format={(v) => `${Math.round(v).toLocaleString()}개`}
+                />
+              </SubBlock>
+              <SubBlock title="점포당 월평균 매출 비교" aside="실측 집계 기준">
+                <CompareBars
+                  rows={[
+                    { label: "이 상권", value: detail.comparison.perStoreSalesKRW.sangwon, highlight: true },
+                    { label: detail.comparison.guName ?? "자치구", value: detail.comparison.perStoreSalesKRW.gu },
+                    { label: "서울 전체", value: detail.comparison.perStoreSalesKRW.seoul },
+                  ]}
+                />
+              </SubBlock>
+              <p className="mt-2 text-[9.5px] leading-relaxed text-faint">{detail.comparison.note}</p>
             </>
           )}
         </Section>
       )}
 
-      {/* ── ⑤ 유의사항 · 한계 ───────────────────────────── */}
-      <Section n={5} title="유의사항 · 한계">
+      {/* ── ⑤ 인구 분석 ─────────────────────────────────── */}
+      {(result.context?.footTraffic || detail?.footTraffic) && (
+        <Section n={5} title="인구 분석" aside="유동인구 — 상권 단위(업종 무관)">
+          {result.context?.footTraffic && (
+            <div className="flex items-end justify-between gap-3">
+              <div>
+                <div className="text-[10px] text-faint">분기 유동인구</div>
+                <div className="mt-0.5 text-xl font-semibold text-fg" style={{ fontFamily: "var(--font-numeric)" }}>
+                  {formatPeople(result.context.footTraffic.total)}
+                </div>
+              </div>
+              {detail?.footTraffic && (
+                <div className="flex flex-wrap justify-end gap-1.5">
+                  <DeltaBadge
+                    current={result.context.footTraffic.total}
+                    base={detail.footTraffic.prev}
+                    label="전분기"
+                  />
+                  <DeltaBadge
+                    current={result.context.footTraffic.total}
+                    base={detail.footTraffic.yoy}
+                    label="전년 동분기"
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {detail?.footTraffic && detail.footTraffic.trend.length > 1 && (
+            <SubBlock title="유동인구 추이" aside={`최근 ${detail.footTraffic.trend.length}개 분기 · 단위: 명`}>
+              <TrendChart data={detail.footTraffic.trend} format={formatPeopleCompact} />
+            </SubBlock>
+          )}
+          {detail?.footTraffic?.byDay && (
+            <SubBlock
+              title="요일별 유동인구"
+              aside={topOf(detail.footTraffic.byDay) && (
+                <><b className="text-gold-soft">{topOf(detail.footTraffic.byDay)!.label}요일</b> {(topOf(detail.footTraffic.byDay)!.ratio * 100).toFixed(1)}% 최고</>
+              )}
+            >
+              <SliceBarChart data={detail.footTraffic.byDay} />
+            </SubBlock>
+          )}
+          {detail?.footTraffic?.byTime && (
+            <SubBlock
+              title="시간대별 유동인구"
+              aside={topOf(detail.footTraffic.byTime) && (
+                <><b className="text-gold-soft">{topOf(detail.footTraffic.byTime)!.label}시</b> {(topOf(detail.footTraffic.byTime)!.ratio * 100).toFixed(1)}% 최고</>
+              )}
+            >
+              <SliceBarChart data={detail.footTraffic.byTime} />
+            </SubBlock>
+          )}
+          {detail?.footTraffic?.byGender && (
+            <SubBlock title="성별 유동인구">
+              <GenderSplit data={detail.footTraffic.byGender} />
+            </SubBlock>
+          )}
+          {result.context && result.context.demographics.length > 0 && (
+            <SubBlock title="연령대 구성">
+              <DemographicsChart data={result.context.demographics} />
+            </SubBlock>
+          )}
+        </Section>
+      )}
+
+      {/* ── ⑥ 배후지 분석 — 예시 데이터 (실데이터 미보유) ── */}
+      <Section n={6} title="배후지 분석" aside="주거·직장·소득·임대">
+        <div className="mb-3 rounded-md border border-caution/40 bg-caution/10 px-2.5 py-2 text-[10px] leading-relaxed text-caution">
+          ⚠ 예시 데이터 — 아래 수치는 실데이터 미보유 항목의 UI 시연용으로, 상권 코드 기반으로
+          생성한 가상 값입니다. 실제 상권 특성과 무관하며, 실서비스에서는 상주인구·직장인구·
+          소득소비·임대시세 공공 데이터셋을 연동합니다.
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="rounded-lg bg-ink-700/50 px-3 py-2.5">
+            <div className="text-[10px] text-faint">주거인구</div>
+            <div className="mt-0.5 text-base font-semibold text-fg" style={{ fontFamily: "var(--font-numeric)" }}>
+              {formatPeople(hinterland.residents)}
+            </div>
+            <div className="mt-0.5 text-[10px] text-muted">{hinterland.households.toLocaleString()}가구</div>
+          </div>
+          <div className="rounded-lg bg-ink-700/50 px-3 py-2.5">
+            <div className="text-[10px] text-faint">직장인구</div>
+            <div className="mt-0.5 text-base font-semibold text-fg" style={{ fontFamily: "var(--font-numeric)" }}>
+              {formatPeople(hinterland.workers)}
+            </div>
+            <div className="mt-0.5 text-[10px] text-muted">아파트 비율 {(hinterland.aptRatio * 100).toFixed(0)}%</div>
+          </div>
+          <div className="rounded-lg bg-ink-700/50 px-3 py-2.5">
+            <div className="text-[10px] text-faint">주거인구 소득수준</div>
+            <div className="mt-0.5 text-base font-semibold text-fg" style={{ fontFamily: "var(--font-numeric)" }}>
+              {hinterland.incomeDecile}분위
+            </div>
+            <div className="mt-0.5 text-[10px] text-muted">{incomeDecileRange(hinterland.incomeDecile)}</div>
+          </div>
+          <div className="rounded-lg bg-ink-700/50 px-3 py-2.5">
+            <div className="text-[10px] text-faint">1층 환산 임대시세</div>
+            <div className="mt-0.5 text-base font-semibold text-fg" style={{ fontFamily: "var(--font-numeric)" }}>
+              {formatKRW(hinterland.rentPer33m2)}
+            </div>
+            <div className="mt-0.5 text-[10px] text-muted">3.3㎡당 월 환산</div>
+          </div>
+        </div>
+        <SubBlock title="소비 트렌드" aside="카테고리 비중">
+          <SliceBarChart data={hinterland.consumption} />
+        </SubBlock>
+        <SubBlock title="주요 집객시설">
+          <div className="flex flex-wrap gap-1.5">
+            {hinterland.facilities.map((f) => (
+              <span
+                key={f.label}
+                className="rounded-full border border-line/60 bg-ink-700/50 px-2 py-1 text-[10.5px] text-muted"
+              >
+                {f.label} <b className="text-fg/90" style={{ fontFamily: "var(--font-numeric)" }}>{f.count}</b>
+              </span>
+            ))}
+          </div>
+        </SubBlock>
+      </Section>
+
+      {/* ── ⑦ 유의사항 · 한계 ───────────────────────────── */}
+      <Section n={7} title="유의사항 · 한계">
         <ul className="space-y-1.5 text-[11px] leading-relaxed text-muted">
           {result.survival?.granularity === "seoul_industry" && (
             <li className="flex gap-1.5">
@@ -567,6 +864,16 @@ export default function ResultPanel({
               예상 매출은 <b className="text-fg/80">상권×업종 전체 점포의 합산 규모</b>로, 개별 점포 매출이 아닙니다.
             </li>
           )}
+          {detail && (
+            <li className="flex gap-1.5">
+              <span className="text-faint">·</span>
+              <b className="text-fg/80">&lsquo;모델 예측&rsquo;과 &lsquo;실측 집계&rsquo;는 산출 방식이 달라</b> 값이 다를 수 있습니다 — 각 블록에 기준을 표기했습니다. 상세 분포·추이는 클리핑 전 원천값 기준입니다.
+            </li>
+          )}
+          <li className="flex gap-1.5">
+            <span className="text-faint">·</span>
+            <b className="text-caution/90">배후지 분석(⑥)은 예시 데이터</b>로, 실제 상권 특성과 무관합니다 (실데이터셋 연동 전 UI 시연용).
+          </li>
           <li className="flex gap-1.5">
             <span className="text-faint">·</span>
             모든 수치는 공공데이터 기반 참고 지표이며, 투자·창업 결정의 근거가 아닌 탐색 도구입니다.
@@ -574,9 +881,9 @@ export default function ResultPanel({
         </ul>
       </Section>
 
-      {/* ── ⑥ 데이터 출처 ───────────────────────────────── */}
+      {/* ── ⑧ 데이터 출처 ───────────────────────────────── */}
       {result.meta.sources.length > 0 && (
-        <Section n={6} title="데이터 출처">
+        <Section n={8} title="데이터 출처">
           <ul className="space-y-0.5">
             {result.meta.sources.map((s) => (
               <li key={s} className="text-[10.5px] leading-relaxed text-faint">

@@ -141,6 +141,80 @@ export async function analyzeViaFile(req: AnalyzeRequest): Promise<AnalyzeResult
 }
 
 /** 모델/파일 공통: 외부 raw 응답을 내부 계약(AnalyzeResult)으로 정규화 + grade/면책 주입 */
+/** 상세 분석(detail) 흡수 — 실측 원천값. 필드가 없거나 형태가 다르면 null로 방어 */
+function packDetail(raw: any): AnalyzeResult["detail"] {
+  if (!raw || typeof raw !== "object") return null;
+
+  const slices = (arr: any): { label: string; ratio: number }[] | null =>
+    Array.isArray(arr) && arr.length
+      ? arr.map((s: any) => ({ label: String(s.label), ratio: Number(s.ratio ?? 0) }))
+      : null;
+  const trend = (arr: any): { quarter: string; value: number }[] =>
+    Array.isArray(arr)
+      ? arr
+          .filter((p: any) => p && p.value != null)
+          .map((p: any) => ({ quarter: String(p.quarter), value: Number(p.value) }))
+      : [];
+  const num = (v: any): number | null => (v != null && Number.isFinite(Number(v)) ? Number(v) : null);
+
+  return {
+    sales: raw.sales
+      ? {
+          monthlyTotalKRW: num(raw.sales.monthlyTotalKRW),
+          perStoreKRW: num(raw.sales.perStoreKRW),
+          byDay: slices(raw.sales.byDay),
+          byTime: slices(raw.sales.byTime),
+          byGender: slices(raw.sales.byGender),
+          byAge: slices(raw.sales.byAge),
+          trend: trend(raw.sales.trend),
+          prev: num(raw.sales.prev),
+          yoy: num(raw.sales.yoy),
+          basis: String(raw.sales.basis ?? "unknown"),
+        }
+      : null,
+    store: raw.store
+      ? {
+          openCount: num(raw.store.openCount),
+          openRate: num(raw.store.openRate),
+          closeCount: num(raw.store.closeCount),
+          closeRate: num(raw.store.closeRate),
+          franchiseCount: num(raw.store.franchiseCount),
+          generalCount: num(raw.store.generalCount),
+          trend: trend(raw.store.trend),
+          prev: num(raw.store.prev),
+          yoy: num(raw.store.yoy),
+        }
+      : null,
+    footTraffic: raw.footTraffic
+      ? {
+          byDay: slices(raw.footTraffic.byDay),
+          byTime: slices(raw.footTraffic.byTime),
+          byGender: slices(raw.footTraffic.byGender),
+          trend: trend(raw.footTraffic.trend),
+          prev: num(raw.footTraffic.prev),
+          yoy: num(raw.footTraffic.yoy),
+          granularity: String(raw.footTraffic.granularity ?? "unknown"),
+        }
+      : null,
+    comparison: raw.comparison
+      ? {
+          guName: raw.comparison.guName ?? null,
+          storeCount: {
+            sangwon: num(raw.comparison.storeCount?.sangwon),
+            gu: num(raw.comparison.storeCount?.gu),
+            seoul: num(raw.comparison.storeCount?.seoul),
+          },
+          perStoreSalesKRW: {
+            sangwon: num(raw.comparison.perStoreSalesKRW?.sangwon),
+            gu: num(raw.comparison.perStoreSalesKRW?.gu),
+            seoul: num(raw.comparison.perStoreSalesKRW?.seoul),
+          },
+          note: String(raw.comparison.note ?? ""),
+        }
+      : null,
+  };
+}
+
 function normalizeAnalyze(
   raw: any,
   req: AnalyzeRequest,
@@ -238,6 +312,7 @@ function normalizeAnalyze(
           generator: String(raw.narrative.generator ?? "unknown"),
         }
       : null,
+    detail: packDetail(raw?.detail),
     meta,
     debug: trace,
   };

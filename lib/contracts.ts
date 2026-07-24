@@ -92,6 +92,84 @@ export const ContextPayload = z.object({
 });
 export type ContextPayload = z.infer<typeof ContextPayload>;
 
+// ------------------------------------------------------------------
+// 상세 분석 (golmok 벤치마크 확장) — 실측 원천값 기반, 모델 예측과 구분
+// ------------------------------------------------------------------
+/** 비중 슬라이스 — 요일/시간대/성별/연령 분포 (ratio 0~1, 그룹 합 대비) */
+export const RatioSlice = z.object({ label: z.string(), ratio: z.number() });
+export type RatioSlice = z.infer<typeof RatioSlice>;
+
+/** 분기 추이 포인트 */
+export const TrendPoint = z.object({ quarter: z.string(), value: z.number() });
+export type TrendPoint = z.infer<typeof TrendPoint>;
+
+export const SalesDetail = z.object({
+  /** 실측(카드 추정) 분기 매출 — 모델 예측(monthlyEstimateKRW)과 별개 */
+  monthlyTotalKRW: z.number().nullable(),
+  perStoreKRW: z.number().nullable(),
+  byDay: z.array(RatioSlice).nullable(),
+  byTime: z.array(RatioSlice).nullable(),
+  byGender: z.array(RatioSlice).nullable(),
+  byAge: z.array(RatioSlice).nullable(),
+  trend: z.array(TrendPoint),
+  /** 전분기 값 (없으면 null) */
+  prev: z.number().nullable(),
+  /** 전년 동분기 값 (없으면 null) */
+  yoy: z.number().nullable(),
+  basis: z.string(),
+});
+export type SalesDetail = z.infer<typeof SalesDetail>;
+
+export const StoreDetail = z.object({
+  openCount: z.number().nullable(),
+  openRate: z.number().nullable(),
+  closeCount: z.number().nullable(),
+  closeRate: z.number().nullable(),
+  franchiseCount: z.number().nullable(),
+  generalCount: z.number().nullable(),
+  trend: z.array(TrendPoint),
+  prev: z.number().nullable(),
+  yoy: z.number().nullable(),
+});
+export type StoreDetail = z.infer<typeof StoreDetail>;
+
+export const FootTrafficDetail = z.object({
+  byDay: z.array(RatioSlice).nullable(),
+  byTime: z.array(RatioSlice).nullable(),
+  byGender: z.array(RatioSlice).nullable(),
+  trend: z.array(TrendPoint),
+  prev: z.number().nullable(),
+  yoy: z.number().nullable(),
+  /** "sangwon" — 업종 무관 상권 단위 */
+  granularity: z.string(),
+});
+export type FootTrafficDetail = z.infer<typeof FootTrafficDetail>;
+
+/** 서울시/자치구/상권 3단 비교 (상권 단위 데이터 집계 기준) */
+export const ComparisonDetail = z.object({
+  guName: z.string().nullable(),
+  storeCount: z.object({
+    sangwon: z.number().nullable(),
+    gu: z.number().nullable(),
+    seoul: z.number().nullable(),
+  }),
+  perStoreSalesKRW: z.object({
+    sangwon: z.number().nullable(),
+    gu: z.number().nullable(),
+    seoul: z.number().nullable(),
+  }),
+  note: z.string(),
+});
+export type ComparisonDetail = z.infer<typeof ComparisonDetail>;
+
+export const AnalyzeDetail = z.object({
+  sales: SalesDetail.nullable(),
+  store: StoreDetail.nullable(),
+  footTraffic: FootTrafficDetail.nullable(),
+  comparison: ComparisonDetail.nullable(),
+});
+export type AnalyzeDetail = z.infer<typeof AnalyzeDetail>;
+
 export const AnalyzeResult = z.object({
   status: AnalyzeStatus,
   sourceMode: SourceMode,
@@ -110,6 +188,8 @@ export const AnalyzeResult = z.object({
   narrative: z
     .object({ summary: z.string(), generator: z.string() })
     .nullable(),
+  /** 상세 분석 (실측 원천값) — 목업 폴백에는 없을 수 있음 */
+  detail: AnalyzeDetail.nullable().optional(),
   meta: z.object({
     confidence: z.enum(["high", "medium", "low"]),
     sampleSize: z.number().int(),
