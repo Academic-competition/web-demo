@@ -67,6 +67,18 @@ export default function Home() {
   const industries = meta.data?.industries ?? [];
   const selectedSangwon = sangwons.find((s) => s.code === selectedCode) ?? null;
 
+  /**
+   * 지역 우선 모드인데 이 상권에 업종 순위 데이터가 없는 경우.
+   * 지도 목록이 랭킹 사전계산보다 넓어서 발생한다(현재 74개 상권).
+   * 이때 업종 셀렉트를 열어주지 않으면 다음 단계로 갈 방법이 없어 완전히 막힌다.
+   */
+  const rankingUnavailable =
+    mode === "location" &&
+    selectedCode != null &&
+    !!topIndustries.data &&
+    topIndustries.data.sangwon.code === selectedCode &&
+    topIndustries.data.industries.length === 0;
+
   const runAnalyze = useCallback(
     (sangwonCode: number, industry: string) => {
       hasAnalyzedRef.current = true;
@@ -130,7 +142,9 @@ export default function Home() {
 
   const handleIndustryChange = (code: string) => {
     setIndustryCode(code);
-    if (hasAnalyzedRef.current && selectedCode != null && code) {
+    // 지역 우선 모드는 상권이 이미 확정된 상태이므로 첫 선택에도 바로 분석한다.
+    // (업종 순위가 없는 상권에서 업종을 직접 고르는 경로 — 안 그러면 아무 반응이 없다)
+    if (selectedCode != null && code && (hasAnalyzedRef.current || mode === "location")) {
       runAnalyze(selectedCode, code);
     }
   };
@@ -203,10 +217,15 @@ export default function Home() {
 
         {/* 조건 입력 */}
         <div className="space-y-3 px-6 py-4">
-          {mode === "industry" && (
+          {(mode === "industry" || rankingUnavailable) && (
             <div>
               <label className="mb-1.5 block text-[11px] font-medium text-muted">
-                업종 <span className="text-gold">— 선택하면 히트맵이 그려집니다</span>
+                업종{" "}
+                <span className="text-gold">
+                  {rankingUnavailable
+                    ? "— 선택하면 이 상권의 보고서가 열립니다"
+                    : "— 선택하면 히트맵이 그려집니다"}
+                </span>
               </label>
               <select
                 value={industryCode}
@@ -294,7 +313,7 @@ export default function Home() {
           )}
 
           {/* 위치 먼저 모드: 상권을 고르면 우측에 업종 랭킹이 뜨고, 업종을 누르면 분석됩니다 */}
-          {mode === "location" && selectedSangwon && (
+          {mode === "location" && selectedSangwon && !rankingUnavailable && (
             <p className="rounded-lg border border-line/50 bg-ink-800/40 px-3.5 py-2 text-[11px] leading-relaxed text-muted">
               아래에서 이 상권의 <span className="text-gold-soft">업종별 기회</span>를 확인하고 업종을 선택하세요.
             </p>

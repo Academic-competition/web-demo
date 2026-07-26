@@ -65,8 +65,18 @@ export const RevenuePayload = z.object({
   percentileInSangwon: z.number().min(0).max(100).nullable(),
   /** 면책 문구 — 서버가 강제 주입, UI 누락 구조적으로 불가 */
   disclaimer: z.string().min(1),
-  /** 집계 수준 안내 — "상권×업종 전체 점포 합산" (1개 점포 매출 아님) */
+  /**
+   * 집계 수준 안내(긴 문장) — 서버가 강제 주입.
+   * 소스에 따라 의미가 정반대다: 정적 폴백은 "상권 전체 점포 합산",
+   * 라이브(Commercial-AI-)는 "점포 1곳 평균". UI 는 이 값을 그대로 쓸 것.
+   */
   scaleNote: z.string(),
+  /**
+   * 집계 수준 짧은 라벨 — KPI 타일·요약 한 줄용 ("상권×업종 합산" / "점포당 평균").
+   * ⚠️ UI 에 하드코딩하지 말 것. scaleNote 와 반드시 같은 의미여야 하며,
+   *    라이브/정적 소스가 섞이면 한 리포트 안에서 모순된 라벨이 나온다.
+   */
+  scaleLabel: z.string(),
 });
 export type RevenuePayload = z.infer<typeof RevenuePayload>;
 
@@ -84,6 +94,12 @@ export const ContextPayload = z.object({
       franchiseRatio: z.number().nullable(),
       /** 점포 데이터 집계 단위 — "seoul_industry"면 서울 전체 기준 */
       granularity: z.string(),
+      /**
+       * 상류 정의 보정 안내 — 서버가 보정을 적용했을 때만 문구가 담긴다 (미적용이면 null).
+       * ⚠️ UI 는 이 값이 있으면 **반드시 노출**할 것. 표시 수치가 모델 서버 원본과
+       *    다르다는 사실을 숨기지 않기 위한 필드다.
+       */
+      correction: z.string().nullable(),
     })
     .nullable(),
   demographics: z.array(

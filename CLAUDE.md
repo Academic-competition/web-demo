@@ -8,7 +8,14 @@
 ## 구조 원칙 (지킬 것)
 
 - **프론트는 `lib/contracts.ts`(zod, 내부 계약 정본)에만 의존** — 모델 응답 형태를 프론트에서 다루지 말 것
-- 모델 서버 스펙 변경은 `lib/normalize.ts` 한 곳에서 흡수 (외부 계약: `../files/ANSWERS.md`)
+- 모델 서버 스펙 변경은 `lib/normalize.ts` 한 곳에서 흡수. **외부 계약이 2개**이며 서로
+  호환되지 않으니 매퍼를 섞지 말 것:
+  - 라이브 = `Commercial-AI-` FastAPI (`POST /reports/summary`, `districtCode` 계열,
+    매출은 **점포당**, 생존율 미제공 → 폐업률에서 웹이 환산) → `normalizeSummary()`
+  - 정적 폴백 = `model-exports/` (구 모델 배치 산출물, `sangwonCode` 계열,
+    매출은 **상권 전체 합산**, 생존율·추이 포함) → `normalizeAnalyze()`
+- 라이브는 **옵트인**(`MODEL_SERVER_URL` 미설정 = 정적 사용). 모델 서버에 실데이터가
+  적재되기 전엔 켜지 말 것 — 커버리지가 62업종×1,645상권에서 샘플 수준으로 줄어든다
 - grade 판정(safe≥0.60/caution≥0.45)·disclaimer·scaleNote는 route handler가 강제 주입 —
   UI에서 이 값들을 재계산하거나 생략하지 말 것
 - 브라우저에서 모델 서버(:8000) 직접 호출 금지 — 반드시 `/api/*` 경유

@@ -35,6 +35,15 @@ function topOf(arr?: RatioSlice[] | null): RatioSlice | null {
 const formatPeopleCompact = (v: number) =>
   v >= 1e4 ? `${Math.round(v / 1e4)}만` : Math.round(v).toLocaleString();
 
+/**
+ * 생존율 집계 단위 라벨 — survival.granularity 로만 판단한다 (문구 하드코딩 금지).
+ * 라이브(Commercial-AI-)는 상권×업종 폐업률이라 "상권×업종",
+ * 정적 폴백(구 모델)은 업종 단위 서울 전체 통계라 "업종".
+ */
+function survivalScopeLabel(granularity: string): string {
+  return granularity === "seoul_industry" ? "업종 단위" : "상권×업종 단위";
+}
+
 /** 연령 밴드 한글 라벨 (한 줄 요약용 — 차트 내부 라벨은 DetailCharts가 처리) */
 const AGE_KO: Record<string, string> = {
   "10s": "10대", "20s": "20대", "30s": "30대", "40s": "40대", "50s": "50대", "60s+": "60대 이상",
@@ -198,6 +207,22 @@ export function ErrorState({ message, onRetry }: { message: string; onRetry: () 
 // ------------------------------------------------------------------
 // 공용 조각
 // ------------------------------------------------------------------
+/**
+ * 서버가 상류 값을 보정했음을 알리는 배지.
+ * competition.correction 이 있을 때만 렌더 — 표시 수치가 모델 서버 원본과 다르다는
+ * 사실을 숨기지 않기 위한 장치다 (목업 배지와 같은 정직성 원칙).
+ */
+function CorrectedBadge() {
+  return (
+    <span
+      className="ml-1 inline-block rounded border border-gold/40 bg-gold/10 px-1 py-px align-middle text-[9px] text-gold-soft"
+      title="모델 서버 원본값을 보정해 표시했습니다 — ④ 업종·경쟁 분석에서 근거 확인"
+    >
+      보정됨
+    </span>
+  );
+}
+
 function MockBadge() {
   return (
     <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-caution/40 bg-caution/10 px-2 py-0.5 text-[10px] font-medium text-caution">
@@ -410,7 +435,11 @@ export default function ResultPanel({
           />
         )}
         {result.revenue && (
-          <StatTile label="예상 월매출" value={formatKRW(result.revenue.monthlyEstimateKRW)} hint="상권×업종 합산" />
+          <StatTile
+            label="예상 월매출"
+            value={formatKRW(result.revenue.monthlyEstimateKRW)}
+            hint={result.revenue.scaleLabel}
+          />
         )}
         {pct != null && (
           <StatTile label="동일업종 내" value={`상위 ${(100 - pct).toFixed(0)}%`} tone="text-gold" hint="예상매출 백분위" />
@@ -440,7 +469,9 @@ export default function ResultPanel({
             <Bullet tag="생존">
               3년 생존율 <b className={v.text}>{(result.survival.probability * 100).toFixed(0)}%</b>{" "}
               <b className={v.text}>({v.label})</b> — {v.sentence}{" "}
-              <span className="text-muted">실측 폐업률 환산·업종 단위 통계입니다.</span>
+              <span className="text-muted">
+                실측 폐업률 환산·{survivalScopeLabel(result.survival.granularity)} 통계입니다.
+              </span>
             </Bullet>
           )}
           {result.revenue && (
@@ -451,7 +482,7 @@ export default function ResultPanel({
                   {" "}— 동일 업종 상권 중 <b className="text-gold">상위 {(100 - pct).toFixed(0)}%</b>
                 </>
               )}
-              <span className="text-muted"> (상권×업종 합산 규모).</span>
+              <span className="text-muted"> ({result.revenue.scaleLabel} 규모).</span>
               {(() => {
                 const chg = pctChange(detail?.sales?.monthlyTotalKRW ?? null, detail?.sales?.prev ?? null);
                 if (chg == null || Math.abs(chg) < 0.05) return null;
@@ -482,6 +513,7 @@ export default function ResultPanel({
               {result.context.competition.franchiseRatio != null && (
                 <> · 프랜차이즈 {(result.context.competition.franchiseRatio * 100).toFixed(0)}%</>
               )}
+              {result.context.competition.correction && <CorrectedBadge />}
               {result.context.competition.granularity === "seoul_industry" ? (
                 <span className="text-muted"> (서울 전체 기준) — 경쟁 밀도를 함께 살펴보세요.</span>
               ) : (
@@ -523,9 +555,11 @@ export default function ResultPanel({
             />
           </div>
           <p className="mt-2 text-center text-[11px] leading-relaxed text-faint">
-            {result.survival.basis === "empirical_closure_rate"
+            {result.survival.basis.startsWith("empirical_closure_rate")
               ? "예측치가 아닌 실측 폐업률 통계의 3년 환산값입니다."
               : "모델 산출값입니다."}
+            {result.survival.basis.endsWith("_shrunk") &&
+              " 점포 수가 적어 폐업 표본이 부족한 상권은 업종 평균 쪽으로 보정했습니다 (소표본이 100%로 표시되는 것을 막기 위함)."}
             {result.survival.granularity === "seoul_industry" &&
               " 업종 단위 통계로, 상권별 차이는 아직 반영되지 않았습니다."}
           </p>
@@ -665,6 +699,7 @@ export default function ResultPanel({
                 )}
               </div>
             )}
+            {/* 보정 근거는 여기서 전부 밝힌다 (① 배지 → 이 블록으로 유도) */}
             {detail?.store && (detail.store.openCount != null || detail.store.closeCount != null) && (
               <div className="rounded-lg bg-ink-700/50 px-3 py-2.5">
                 <div className="text-[10px] text-faint">이번 분기 개·폐업</div>
@@ -680,6 +715,27 @@ export default function ResultPanel({
               </div>
             )}
           </div>
+
+          {result.context?.competition?.correction && (
+            <div className="mt-2 rounded-lg border border-gold/25 bg-gold/5 px-3 py-2.5">
+              <div className="flex items-center gap-1.5">
+                <span className="rounded border border-gold/40 bg-gold/10 px-1.5 py-px text-[9px] font-medium text-gold-soft">
+                  보정됨
+                </span>
+                <span className="text-[10.5px] font-medium text-gold-soft">
+                  점포 수 · 프랜차이즈 비율
+                </span>
+              </div>
+              <p className="mt-1.5 text-[10.5px] leading-relaxed text-muted">
+                {result.context.competition.correction}
+              </p>
+              <p className="mt-1 text-[10px] leading-relaxed text-faint">
+                원천 데이터에서 <b className="text-muted">일반 점포 + 프랜차이즈 = 전체</b> 항등식이
+                전 행에서 성립함을 확인해 역산했습니다. 다만 <b className="text-muted">예상 매출은
+                보정되지 않았습니다</b> — 같은 분모가 모델 학습에 쓰여 재학습 없이는 고칠 수 없습니다.
+              </p>
+            </div>
+          )}
 
           {detail?.store && (
             <div className="mt-2 flex flex-wrap gap-1.5">
@@ -924,16 +980,31 @@ export default function ResultPanel({
       {/* ── ⑧ 유의사항 · 한계 ───────────────────────────── */}
       <Section n={8} title="유의사항 · 한계">
         <ul className="space-y-1.5 text-[11px] leading-relaxed text-muted">
-          {result.survival?.granularity === "seoul_industry" && (
+          {result.survival && (
             <li className="flex gap-1.5">
               <span className="text-faint">·</span>
-              생존율은 예측이 아니라 <b className="text-fg/80">실측 폐업률의 3년 환산치</b>이며, 업종 단위 통계입니다(상권별 차이 미반영).
+              생존율은 예측이 아니라 <b className="text-fg/80">실측 폐업률의 3년 환산치</b>입니다
+              ({survivalScopeLabel(result.survival.granularity)} 통계, 폐업률이 기간 내 일정하다는 가정).
+              {result.survival.granularity === "seoul_industry" && " 상권별 차이는 반영되지 않습니다."}
             </li>
           )}
           {result.revenue && (
+            /* 집계 수준 문구는 서버 주입값(scaleNote)을 그대로 쓴다 —
+               소스에 따라 '합산'/'점포당'이 갈리므로 하드코딩하면 리포트 안에서 모순이 생긴다 */
             <li className="flex gap-1.5">
               <span className="text-faint">·</span>
-              예상 매출은 <b className="text-fg/80">상권×업종 전체 점포의 합산 규모</b>로, 개별 점포 매출이 아닙니다.
+              예상 매출 — {result.revenue.scaleNote}
+            </li>
+          )}
+          {result.context?.competition?.correction && (
+            <li className="flex gap-1.5">
+              <span className="text-faint">·</span>
+              <span>
+                <b className="text-fg/80">점포 수·프랜차이즈 비율은 보정된 값</b>입니다 (④ 참조).
+                모델 서버가 점포 수를 일반(비프랜차이즈) 기준으로 반환해 원천 항등식으로 역산했습니다.
+                <b className="text-fg/80"> 예상 매출은 같은 원인으로 과대 추정</b>되어 있으며
+                모델 재학습 전까지 보정할 수 없습니다.
+              </span>
             </li>
           )}
           {detail && (

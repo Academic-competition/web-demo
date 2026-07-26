@@ -89,6 +89,7 @@ export function mockAnalyze(req: AnalyzeRequest): AnalyzeResult {
       disclaimer:
         "카드 결제 기반 추정치를 재추정한 상권 간 비교용 참고 지표입니다. 절대 금액 보장이 아닙니다.",
       scaleNote: "해당 상권 내 동일 업종 전체 점포의 합산 규모입니다 (1개 점포 매출 아님).",
+      scaleLabel: "상권×업종 합산",
     },
     context: {
       footTraffic: {
@@ -100,6 +101,7 @@ export function mockAnalyze(req: AnalyzeRequest): AnalyzeResult {
         storeCount: Math.round(500 + rand() * 60000),
         franchiseRatio: Math.round(rand() * 400) / 1000,
         granularity: "seoul_industry",
+        correction: null,
       },
       demographics: [
         { ageBand: "10s", ratio: 0.06 },

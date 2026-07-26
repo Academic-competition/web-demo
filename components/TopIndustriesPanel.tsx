@@ -79,6 +79,44 @@ export default function TopIndustriesPanel({
 
   const { sangwon } = data;
 
+  /**
+   * 랭킹 데이터가 없는 상권 (지도 목록에는 있지만 사전계산에서 빠진 케이스).
+   * 목업 숫자로 채우지 않고 사유를 밝히고, 업종을 직접 고르는 길로 안내한다.
+   */
+  if (data.industries.length === 0) {
+    return (
+      <div className="rise-in space-y-3">
+        <div>
+          <h2 className="font-[family-name:var(--font-display)] text-[19px] leading-tight text-fg">
+            {sangwon.name ?? `상권 #${sangwon.code}`}
+          </h2>
+          {(sangwon.gu || sangwon.dong) && (
+            <p className="mt-0.5 text-xs text-muted">
+              {[sangwon.gu, sangwon.dong].filter(Boolean).join(" ")}
+            </p>
+          )}
+        </div>
+
+        <div className="rounded-xl border border-caution/30 bg-caution/5 px-5 py-4">
+          <div className="text-[13px] font-medium text-fg">
+            이 상권은 업종별 순위 데이터가 없습니다
+          </div>
+          <p className="mt-1.5 text-[11.5px] leading-relaxed text-muted">
+            지도에는 표시되지만 업종별 사전계산 통계가 집계되지 않은 상권입니다. 표본이 부족하거나
+            집계 대상에서 제외된 경우로, <b className="text-fg">추정값으로 대신 채우지 않습니다.</b>
+          </p>
+          <p className="mt-2.5 text-[11.5px] leading-relaxed text-gold-soft">
+            왼쪽에서 업종을 직접 선택하면 이 상권의 상세 보고서를 볼 수 있습니다.
+          </p>
+        </div>
+
+        <p className="border-t border-line/50 pt-2 text-[10px] leading-relaxed text-faint">
+          기준 {data.dataAsOf}. 업종별 순위는 사전계산 배치 산출물에서 제공됩니다.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-3">
       {/* 헤더 */}
@@ -203,7 +241,11 @@ export default function TopIndustriesPanel({
       {/* 각주 */}
       <p className="border-t border-line/50 pt-2 text-[10px] leading-relaxed text-faint">
         창업기회점수는 <b className="text-muted">이 상권 안에서</b> 업종 간 예상매출·경쟁여건·폐업위험을
-        종합한 상대 지표입니다. 생존율은 업종 단위 실측 폐업률 통계(상권별 동일)입니다. 기준 {data.dataAsOf}.
+        종합한 상대 지표입니다. 생존율은{" "}
+        {data.survivalGranularity === "seoul_industry"
+          ? "업종 단위 실측 폐업률 통계(상권별 동일)"
+          : "상권×업종 단위 실측 폐업률 통계"}
+        입니다. 기준 {data.dataAsOf}.
       </p>
     </div>
   );

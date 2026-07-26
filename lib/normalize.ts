@@ -1,10 +1,22 @@
 /**
  * normalize.ts — anti-corruption layer (서버 전용)
  *
- * 외부 계약(모델 서버, files/ANSWERS.md)이 어떤 형태든 여기서 내부 계약
- * (lib/contracts.ts)으로 정규화한다. 모델 스펙이 바뀌면 이 파일만 고친다.
+ * 외부 계약이 어떤 형태든 여기서 내부 계약(lib/contracts.ts)으로 정규화한다.
+ * 모델 스펙이 바뀌면 이 파일만 고친다 (프론트 무변경이 설계 목표).
  *
- * - grade(신호등) 판정: 여기서 수행 (모델은 확률만 반환)
+ * ⚠️ 현재 흡수하는 외부 계약이 **두 개**다. 스키마가 서로 호환되지 않으니 섞지 말 것:
+ *
+ *  1) 라이브 — Commercial-AI- FastAPI (모델 정본)
+ *     POST /reports/summary · GET /meta/{industries,districts} · GET /health
+ *     → normalizeSummary(). 필드명이 districtCode 계열이고 매출은 "점포당".
+ *     → 생존율을 주지 않으므로 폐업률에서 웹이 환산한다.
+ *
+ *  2) 정적 폴백 — model-exports/ (구 모델 배치 산출물, 실측 2026-Q1)
+ *     analyze/*.json.gz · heatmap/*.json · by-sangwon.json.gz · meta/*.json
+ *     → normalizeAnalyze(). 필드명이 sangwonCode 계열이고 매출은 "상권 전체 합산".
+ *     → 생존율·추이·요일/시간대 분해를 이미 포함한다.
+ *
+ * - grade(신호등) 판정: 여기서 수행 (문턱값이 프론트에 흩어지지 않게)
  * - disclaimer / scaleNote: 여기서 강제 주입 (UI 누락 구조적 차단)
  * - 브라우저는 모델 서버를 직접 호출하지 않는다 (반드시 이 서버 경유)
  */
@@ -21,8 +33,26 @@ import type {
 } from "./contracts";
 import { gradeOf } from "./contracts";
 
-export const MODEL_SERVER_URL = process.env.MODEL_SERVER_URL ?? "http://localhost:8000";
+/**
+ * 라이브 모델 서버는 **명시적 옵트인**이다 (미설정 = 정적 산출물 사용).
+ *
+ * 이유: 정적 산출물(model-exports/)은 62업종×1,645상권 실측이고, 모델 서버는 서빙
+ * 테이블에 실데이터가 적재되기 전까지 그보다 커버리지가 좁다. 기본값을 localhost 로
+ * 두면 (a) 데모 커버리지가 조용히 줄고 (b) Vercel 처럼 모델 서버가 없는 환경에서
+ * 매 요청마다 실패할 fetch 를 한 번씩 낭비한다.
+ */
+export const MODEL_SERVER_URL = process.env.MODEL_SERVER_URL ?? "";
+export const MODEL_LIVE_ENABLED = MODEL_SERVER_URL.length > 0;
 const MODEL_TIMEOUT_MS = Number(process.env.MODEL_TIMEOUT_MS ?? 8000);
+
+/** 라이브 미설정 시 즉시 실패시켜 정적 폴백을 앞당긴다 (네트워크 왕복 없음) */
+function requireLiveEnabled(pathname: string): void {
+  if (!MODEL_LIVE_ENABLED) {
+    throw new Error(
+      `MODEL_SERVER_URL 미설정 — 라이브 호출(${pathname}) 생략, 정적 산출물 사용`
+    );
+  }
+}
 
 /** 모델 레포의 배치 산출물(exports/) 위치 — 히트맵·메타의 1차 소스 */
 const EXPORTS_DIR =
@@ -32,11 +62,14 @@ const REVENUE_DISCLAIMER =
   "카드 결제 기반 추정치를 재추정한 상권 간 비교용 참고 지표입니다. 절대 금액 보장이 아닙니다.";
 const REVENUE_SCALE_NOTE =
   "해당 상권 내 동일 업종 전체 점포의 합산 규모입니다 (1개 점포 매출 아님).";
+/** KPI 타일·요약용 짧은 라벨 — 위 scaleNote 와 항상 같은 의미를 유지할 것 */
+const REVENUE_SCALE_LABEL = "상권×업종 합산";
 
 // ------------------------------------------------------------------
 // 모델 서버 호출
 // ------------------------------------------------------------------
 async function fetchModel(pathname: string, init?: RequestInit): Promise<unknown> {
+  requireLiveEnabled(pathname);
   const res = await fetch(`${MODEL_SERVER_URL}${pathname}`, {
     ...init,
     signal: AbortSignal.timeout(MODEL_TIMEOUT_MS),
@@ -54,6 +87,7 @@ async function fetchModelTraced(
   requestBody: unknown,
   init?: RequestInit
 ): Promise<{ raw: unknown; trace: import("./contracts").DebugTrace }> {
+  requireLiveEnabled(pathname);
   const url = `${MODEL_SERVER_URL}${pathname}`;
   const started = Date.now();
   const res = await fetch(url, {
@@ -91,17 +125,302 @@ async function fetchModelTraced(
 }
 
 // ------------------------------------------------------------------
-// /predict 정규화
+// 생존율 환산 (웹 레이어 책임)
+//
+// Commercial-AI- 는 생존율을 산출하지 않고 분기 폐업률(competition.closureRate, %)만
+// 제공한다. 3년(=12분기) 생존 확률을 여기서 기하 환산한다:
+//     p = (1 − 분기폐업률)^12
+//
+// ⚠️ 예측이 아니라 실측 폐업률의 환산값이며, "폐업률이 12분기 동안 일정하다"는
+//    가정이 들어간다. UI 면책 문구를 반드시 유지할 것.
+//
+// 기존 모델은 이 값을 업종 단위(서울 전체)로만 줘서 상권 간 차이가 없었고(히트맵 단색),
+// 그래서 granularity 가 "seoul_industry" 였다. Commercial-AI- 의 폐업률은
+// 상권×업종 단위이므로 "sangwon_industry" 로 한 단계 올라간다.
 // ------------------------------------------------------------------
+const SURVIVAL_HORIZON_YEARS = 3;
+const SURVIVAL_HORIZON_QUARTERS = SURVIVAL_HORIZON_YEARS * 4;
+
+/**
+ * 축소추정(Empirical Bayes) 사전관측 수 — tools/export_web_static.py 와 동일하게 유지할 것.
+ *
+ * 관측 폐업률을 그대로 쓰면 안 되는 이유: 상권×업종 점포 수 중앙값이 2개라 한 분기에
+ * 폐업 0건인 조합이 대부분이고, 그러면 생존율이 정확히 100% 로 찍힌다 (실측 90.2%).
+ * "3년 생존율 100%" 는 확실성이 아니라 소표본 artifact 이므로 표시할 수 없다.
+ *
+ *     보정 폐업률 = (관측률 × 노출 + k × 업종사전률) / (노출 + k)
+ */
+const SHRINKAGE_PSEUDO_COUNT = 20;
+/** 사전표를 못 읽을 때의 대비값 — 전 업종 분기 폐업률 중앙값(실측 2.06%) */
+const FALLBACK_CLOSURE_PRIOR = 0.0206;
+
+/**
+ * 업종별 사전 폐업률 — tools/export_web_static.py 가 내보낸 meta/closure-priors.json.
+ * 모델 서버는 단일 분기 폐업률만 주므로 이 표 없이는 라이브가 100% 를 뱉는다.
+ */
+let _closurePriorCache: Map<string, number> | null = null;
+async function loadClosurePriors(): Promise<Map<string, number>> {
+  if (!_closurePriorCache) {
+    try {
+      const raw = JSON.parse(
+        await fs.readFile(path.join(EXPORTS_DIR, "meta", "closure-priors.json"), "utf-8")
+      ) as { quarterlyClosureRateByIndustry?: Record<string, number> };
+      _closurePriorCache = new Map(
+        Object.entries(raw.quarterlyClosureRateByIndustry ?? {}).map(([k, v]) => [k, Number(v)])
+      );
+    } catch {
+      _closurePriorCache = new Map(); // 파일 없음 → FALLBACK 사용
+    }
+  }
+  return _closurePriorCache;
+}
+
+/**
+ * 생존율 = (1 − 보정 분기폐업률)^12. 예측이 아니라 실측 폐업률의 환산값.
+ *
+ * @param closureRatePct 모델 서버가 준 관측 분기 폐업률(%)
+ * @param exposure       노출 규모 — 전체 점포 수(해당 분기). 클수록 관측을 신뢰한다.
+ * @param prior          업종 사전 폐업률(0~1)
+ *
+ * ⚠️ 라이브는 단일 분기 관측만 쓸 수 있어 정적 산출물(10분기 누적)보다 거친 추정이다.
+ */
+function survivalFromClosure(
+  closureRatePct: unknown,
+  exposure: number | null,
+  prior: number
+): { probability: number; shrunkRatePct: number } | null {
+  const pct = Number(closureRatePct);
+  if (!Number.isFinite(pct) || pct < 0) return null;
+  const observed = Math.min(pct / 100, 1);
+  const n = exposure != null && Number.isFinite(exposure) && exposure > 0 ? exposure : 0;
+  const shrunk = (observed * n + SHRINKAGE_PSEUDO_COUNT * prior) / (n + SHRINKAGE_PSEUDO_COUNT);
+  const p = Math.pow(1 - Math.min(Math.max(shrunk, 0), 1), SURVIVAL_HORIZON_QUARTERS);
+  return {
+    probability: Math.min(Math.max(p, 0), 1),
+    shrunkRatePct: Number((shrunk * 100).toFixed(4)),
+  };
+}
+
+/**
+ * Commercial-AI- 의 매출 예측은 "점포당 · 다음 분기" 값이다(target = 다음분기매출 ÷ 다음분기점포수).
+ * 정적 폴백(옛 모델)의 "상권 전체 점포 합산"과 의미가 정반대이므로 문구를 분리한다.
+ * 여기서 합산 문구를 재사용하면 점포당 금액에 "합산"이라고 거짓 라벨이 붙는다.
+ */
+const REVENUE_SCALE_NOTE_PER_STORE =
+  "동일 업종 점포 1곳의 평균 규모 예측값입니다 (상권 전체 합산 아님). " +
+  "기간 기준은 원천 데이터의 '당월' 정의를 따르며 확정되지 않았습니다. " +
+  "학습 타깃의 점포 수 분모가 프랜차이즈를 제외한 값이어서, " +
+  "프랜차이즈 비중이 큰 업종에서는 과대 추정될 수 있습니다.";
+/** KPI 타일·요약용 짧은 라벨 — 위 scaleNote 와 항상 같은 의미를 유지할 것 */
+const REVENUE_SCALE_LABEL_PER_STORE = "점포당 평균";
+
+const CONFIDENCE_LEVELS = new Set(["high", "medium", "low"]);
+
+/**
+ * 상류 정의 오류 보정 — 점포 수 · 프랜차이즈 비율 (라이브 경로 전용)
+ *
+ * 모델 서버의 `competition.storeCount` 는 원천 CSV 의 `STOR_CO`(=점포_수)이고,
+ * 이 값은 전체 점포가 아니라 **일반(비프랜차이즈) 점포 수**다. 따라서
+ * `franchiseRatio`(=프랜차이즈/일반)는 1.0 을 넘을 수 있다.
+ * 실측: 라이브 스냅샷 17,764행 중 1,122행(6.3%)이 100% 초과, 최대 1400%.
+ * (예: 이태원 관광특구 편의점 → storeCount 4, ratio 5.0 → "프랜차이즈 500%")
+ *
+ * 원천에서 `STOR_CO + FRC_STOR_CO == SIMILR_INDUTY_STOR_CO` 가 767,251행 **전부**
+ * 항등식으로 성립함을 확인했으므로 전체 점포 수를 정확히 역산할 수 있다:
+ *     전체 점포 = 일반 × (1 + 비율)
+ *     올바른 비율 = 비율 / (1 + 비율)
+ * 역산 검증 결과 17,764/17,764 (100.00%) 가 원천 `유사_업종_점포_수` 와 일치.
+ *
+ * 한계 1: 일반 점포가 0이면 비율이 NaN 으로 오므로 역산 불가 (127행, 0.71%) → 미보정.
+ * 한계 2: 예측 매출(점포당)도 같은 분모 오류를 갖지만 그건 **학습 타깃**이라 여기서
+ *         고칠 수 없다. 근본 해결은 파이프라인에서 분모를 유사_업종_점포_수 로 바꾸고
+ *         재학습하는 것이다.
+ */
+function correctStoreCounts(rawStoreCount: unknown, rawRatio: unknown) {
+  const general = rawStoreCount != null ? Number(rawStoreCount) : null;
+  const ratio = rawRatio != null && Number.isFinite(Number(rawRatio)) ? Number(rawRatio) : null;
+
+  if (general == null || !Number.isFinite(general) || ratio == null || ratio < 0) {
+    return { storeCount: general, franchiseRatio: ratio, correction: null as string | null };
+  }
+
+  const total = Math.round(general * (1 + ratio));
+  const correctedRatio = ratio / (1 + ratio);
+  if (total === general) {
+    // 프랜차이즈가 없으면(ratio=0) 보정 전후가 같다 — 안내를 붙이지 않는다
+    return { storeCount: general, franchiseRatio: correctedRatio, correction: null };
+  }
+
+  return {
+    storeCount: total,
+    franchiseRatio: correctedRatio,
+    correction:
+      `모델 서버는 점포 수를 '일반(비프랜차이즈) ${general}개'로, 프랜차이즈 비율을 ` +
+      `일반 점포 대비 값(${Math.round(ratio * 100)}%)으로 반환합니다. ` +
+      `원천 데이터의 항등식으로 전체 ${total}개를 역산해 비율을 다시 계산했습니다.`,
+  };
+}
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
+
+/** 업종명은 /reports/summary 응답에 없어 메타에서 조회한다 (부가정보 — 실패해도 분석은 진행) */
+let _industryNameCache: Map<string, string> | null = null;
+async function lookupIndustryName(code: string): Promise<string | null> {
+  if (!_industryNameCache) {
+    try {
+      const arr = (await fetchModel("/meta/industries")) as any[];
+      _industryNameCache = new Map(
+        (Array.isArray(arr) ? arr : []).map((i: any) => [
+          String(i.industryCode),
+          String(i.industryName),
+        ])
+      );
+    } catch {
+      return null;
+    }
+  }
+  return _industryNameCache.get(code) ?? null;
+}
+
+// ------------------------------------------------------------------
+// POST /reports/summary 정규화 (Commercial-AI- 외부 계약)
+//
+// 조합이 없으면 서버가 HTTP 404 를 준다 → fetchModelTraced 가 throw → route 가
+// 정적 폴백으로 내려간다. 404 를 insufficient_data 로 바꾸지 말 것:
+// 실데이터가 서빙 테이블에 다 들어오기 전까지는 정적 산출물이 더 좋은 응답이다.
+// ------------------------------------------------------------------
 export async function analyzeViaModel(req: AnalyzeRequest): Promise<AnalyzeResult> {
-  const externalRequest = { sangwonCode: req.sangwonCode, industryCode: req.industryCode };
-  const { raw, trace } = (await fetchModelTraced("/predict", externalRequest, {
+  const externalRequest = {
+    districtCode: req.sangwonCode, // 외부 계약은 districtCode (내부는 sangwonCode)
+    industryCode: req.industryCode,
+  };
+  const { raw, trace } = (await fetchModelTraced("/reports/summary", externalRequest, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(externalRequest),
   })) as { raw: any; trace: import("./contracts").DebugTrace };
-  return normalizeAnalyze(raw, req, "live", trace);
+  const [indName, priors] = await Promise.all([
+    lookupIndustryName(req.industryCode),
+    loadClosurePriors(),
+  ]);
+  const prior = priors.get(req.industryCode) ?? FALLBACK_CLOSURE_PRIOR;
+  return normalizeSummary(raw, req, indName, prior, trace);
+}
+
+function normalizeSummary(
+  raw: any,
+  req: AnalyzeRequest,
+  indName: string | null,
+  closurePrior: number,
+  trace: import("./contracts").DebugTrace
+): AnalyzeResult {
+  const sangwon = {
+    code: Number(raw?.selection?.districtCode ?? req.sangwonCode),
+    name: raw?.overview?.districtName ?? null,
+    gu: raw?.overview?.gu ?? null,
+    dong: raw?.overview?.dong ?? null,
+    // /reports/summary 는 좌표를 주지 않는다 (지도 핀은 /api/meta 의 상권 목록에서 온다)
+    lat: null,
+    lon: null,
+  };
+  const industry = {
+    code: String(raw?.selection?.industryCode ?? req.industryCode),
+    name: indName,
+  };
+  const meta = {
+    confidence: (CONFIDENCE_LEVELS.has(raw?.meta?.confidence)
+      ? raw.meta.confidence
+      : "low") as "high" | "medium" | "low",
+    // 외부는 availableQuarterCount, 내부 계약은 sampleSize
+    sampleSize: Number(raw?.meta?.availableQuarterCount ?? raw?.availableQuarterCount ?? 0),
+    dataAsOf: String(raw?.meta?.dataAsOf ?? "unknown"),
+    sources: Array.isArray(raw?.meta?.sources) ? raw.meta.sources.map(String) : [],
+  };
+
+  if (raw?.status !== "ok") {
+    return {
+      status: raw?.status === "insufficient_data" ? "insufficient_data" : "error",
+      sourceMode: "live",
+      sangwon,
+      industry,
+      survival: null,
+      revenue: null,
+      context: null,
+      narrative: null,
+      detail: null,
+      meta,
+      debug: trace,
+    };
+  }
+
+  const ageDist = raw?.customers?.ageDistribution;
+  const predictedPerStore = raw?.sales?.predictedSalesPerStoreKRW;
+
+  // 점포 수 보정을 먼저 계산한다 — 보정된 전체 점포 수가 생존율 축소추정의 노출량이 된다
+  const comp = correctStoreCounts(raw?.competition?.storeCount, raw?.competition?.franchiseRatio);
+  const surv = survivalFromClosure(raw?.competition?.closureRate, comp.storeCount, closurePrior);
+
+  return {
+    status: "ok",
+    sourceMode: "live",
+    sangwon,
+    industry,
+    survival:
+      surv != null
+        ? {
+            probability: surv.probability,
+            grade: gradeOf(surv.probability), // 신호등 판정은 플랫폼 책임
+            horizonYears: SURVIVAL_HORIZON_YEARS,
+            // 관측 폐업률을 업종 평균으로 축소추정한 값 — 소표본 100% 방지
+            basis: "empirical_closure_rate_shrunk",
+            granularity: "sangwon_industry", // 상권×업종 단위 (기존 seoul_industry 보다 세밀)
+          }
+        : null,
+    revenue:
+      predictedPerStore != null && Number.isFinite(Number(predictedPerStore))
+        ? {
+            monthlyEstimateKRW: Number(predictedPerStore),
+            percentileInSangwon:
+              raw?.sales?.salesPercentile != null ? Number(raw.sales.salesPercentile) : null,
+            disclaimer: REVENUE_DISCLAIMER, // 모델 응답과 무관하게 강제 주입
+            scaleNote: REVENUE_SCALE_NOTE_PER_STORE, // 점포당임을 정직하게 표기
+            scaleLabel: REVENUE_SCALE_LABEL_PER_STORE,
+          }
+        : null,
+    context: {
+      footTraffic:
+        raw?.customers?.totalFootTraffic != null
+          ? {
+              total: Number(raw.customers.totalFootTraffic),
+              // 외부는 평일/주말 비율만 제공 — 요일별 절대값은 없음
+              friday: null,
+              saturday: null,
+            }
+          : null,
+      competition: raw?.competition
+        ? {
+            // 점포 수·프랜차이즈 비율은 상류 정의 오류를 여기서 보정한다 (근거는 위 함수 주석)
+            ...comp,
+            granularity: "sangwon_industry",
+          }
+        : null,
+      demographics:
+        ageDist && typeof ageDist === "object"
+          ? Object.entries(ageDist).map(([ageBand, ratio]) => ({
+              ageBand: String(ageBand),
+              ratio: Number(ratio) || 0,
+            }))
+          : [],
+    },
+    narrative: raw?.diagnosis?.recommendation
+      ? { summary: String(raw.diagnosis.recommendation), generator: "rule_based" }
+      : null,
+    // Commercial-AI- 의 서빙 테이블은 최신 분기 스냅샷이라 추이/요일·시간대 분해가 없다.
+    // detail=null 이면 UI 가 해당 섹션을 자동 생략한다 (차트는 정적 폴백에서만 나옴).
+    detail: null,
+    meta,
+    debug: trace,
+  };
 }
 
 /**
@@ -131,12 +450,29 @@ export async function analyzeViaFile(req: AnalyzeRequest): Promise<AnalyzeResult
     error: null,
   };
 
-  const payload = rawFromFile ?? {
-    status: "insufficient_data",
-    sangwon: { code: req.sangwonCode },
-    industry: { code: req.industryCode },
-    meta: {},
-  };
+  // 조합 데이터가 없을 때도 상권명·업종명·기준분기는 메타에서 채운다.
+  // (안 채우면 "상권 #3081203 · CS100001 (기준 unknown)" 처럼 코드만 노출된다)
+  let payload = rawFromFile;
+  if (!payload) {
+    const meta = await loadSangwonMeta().catch(() => null);
+    const s = meta?.byCode.get(String(req.sangwonCode)) ?? null;
+    payload = {
+      status: "insufficient_data",
+      sangwon: {
+        code: req.sangwonCode,
+        name: s?.name ?? null,
+        gu: s?.gu ?? null,
+        dong: s?.dong ?? null,
+        lat: s?.lat ?? null,
+        lon: s?.lon ?? null,
+      },
+      industry: {
+        code: req.industryCode,
+        name: meta?.industryName.get(req.industryCode) ?? null,
+      },
+      meta: { dataAsOf: meta?.dataAsOf ?? "unknown", sampleSize: 0 },
+    };
+  }
   return normalizeAnalyze(payload, req, "file", fileTrace);
 }
 
@@ -297,7 +633,15 @@ function normalizeAnalyze(
               ? Number(raw.revenue.percentileAmongSangwons)
               : null,
           disclaimer: REVENUE_DISCLAIMER, // 모델 응답과 무관하게 강제 주입
-          scaleNote: REVENUE_SCALE_NOTE,
+          // 집계 수준은 산출물이 스스로 선언한다 (revenue.basis).
+          // tools/export_web_static.py 로 새로 생성한 산출물은 "per_store_predicted"(점포당),
+          // 구 산출물은 basis 가 없어 상권 합산으로 간주한다.
+          ...(raw.revenue.basis === "per_store_predicted"
+            ? {
+                scaleNote: REVENUE_SCALE_NOTE_PER_STORE,
+                scaleLabel: REVENUE_SCALE_LABEL_PER_STORE,
+              }
+            : { scaleNote: REVENUE_SCALE_NOTE, scaleLabel: REVENUE_SCALE_LABEL }),
         }
       : null,
     context: raw?.context
@@ -314,6 +658,8 @@ function normalizeAnalyze(
                 storeCount: raw.context.competition.storeCount ?? null,
                 franchiseRatio: raw.context.competition.franchiseRatio ?? null,
                 granularity: String(raw.context.competition.granularity ?? "unknown"),
+                // 정적 산출물(구 모델)은 점포 수 정의가 다를 수 있어 보정하지 않는다
+                correction: null,
               }
             : null,
           demographics: Array.isArray(raw.context.demographics)
@@ -378,9 +724,20 @@ function packTopIndustries(
   };
 }
 
+/**
+ * ⚠️ 라이브 경로 없음.
+ *
+ * Commercial-AI- 에는 "상권 하나를 주면 업종을 랭킹한다"에 대응하는 엔드포인트가 없다.
+ * (/recommendations/{industryCode} 는 반대 방향 — 업종을 주면 상권을 랭킹한다.)
+ * 62개 업종을 각각 호출하는 건 비현실적이므로, 지역 우선 플로우는 정적 사전계산
+ * (by-sangwon.json.gz)으로만 동작한다. 모델 서버에 엔드포인트가 생기면 여기를 구현할 것.
+ *
+ * 없는 경로로 왕복해서 404 를 받는 대신 즉시 실패시켜 폴백을 앞당긴다.
+ */
 export async function topIndustriesViaModel(sangwonCode: number): Promise<TopIndustriesResult> {
-  const { raw, trace } = await fetchModelTraced(`/sangwon/${sangwonCode}/industries`, { sangwonCode });
-  return packTopIndustries(raw, "live", trace);
+  throw new Error(
+    `상권별 업종 랭킹은 모델 서버에 대응 엔드포인트가 없음 (상권 ${sangwonCode}) — 정적 산출물 사용`
+  );
 }
 
 /** by-sangwon.json.gz 는 상권 수가 많아 한 번 읽고 모듈 메모리에 캐시한다. */
@@ -393,13 +750,83 @@ async function loadBySangwon(): Promise<Record<string, any>> {
   return _bySangwonCache;
 }
 
+/**
+ * 랭킹 데이터가 없는 상권도 이름·자치구를 보여주기 위한 메타 조회 (모듈 캐시).
+ * 지도 목록(meta/sangwons.json)과 랭킹(by-sangwon.json.gz)의 커버리지가 다르기 때문에 필요하다.
+ */
+let _sangwonMetaCache: {
+  dataAsOf: string;
+  byCode: Map<string, any>;
+  industryName: Map<string, string>;
+} | null = null;
+async function loadSangwonMeta() {
+  if (!_sangwonMetaCache) {
+    const [sw, ind]: any[] = await Promise.all([
+      fs
+        .readFile(path.join(EXPORTS_DIR, "meta", "sangwons.json"), "utf-8")
+        .then(JSON.parse),
+      fs
+        .readFile(path.join(EXPORTS_DIR, "meta", "industries.json"), "utf-8")
+        .then(JSON.parse)
+        .catch(() => null),
+    ]);
+    _sangwonMetaCache = {
+      dataAsOf: String(sw?.dataAsOf ?? "unknown"),
+      byCode: new Map((sw?.sangwons ?? []).map((s: any) => [String(s.code), s])),
+      industryName: new Map(
+        (ind?.industries ?? []).map((i: any) => [String(i.code), String(i.name)])
+      ),
+    };
+  }
+  return _sangwonMetaCache;
+}
+
 export async function topIndustriesViaFile(sangwonCode: number): Promise<TopIndustriesResult> {
   const started = Date.now();
   const table = await loadBySangwon();
   const raw = table[String(sangwonCode)];
   const durationMs = Date.now() - started;
+
+  // ------------------------------------------------------------------
+  // 랭킹 데이터 없음 → 502 대신 "빈 목록"으로 정직하게 응답한다.
+  //
+  // 지도 목록(1,645상권)이 랭킹 데이터(1,572상권)보다 넓어서 74개 상권은 클릭 가능하지만
+  // 랭킹이 없다. 여기서 throw 하면 route 가 502 를 내고 지역 우선 플로우가 완전히 막혔다.
+  // 목업으로 채우지 않는 이유: 없는 데이터를 그럴싸한 숫자로 메우지 않는다는 원칙
+  // (insufficient_data 를 숫자 없이 처리하는 것과 같은 방식).
+  //
+  // 실데이터 전환 후에도 이 경로는 필요하다 — 서빙 테이블에도 데이터 부족 조합이 존재한다.
+  // ------------------------------------------------------------------
   if (!raw) {
-    throw new Error(`by-sangwon: 상권 ${sangwonCode} 데이터 없음`);
+    const meta = await loadSangwonMeta().catch(() => null);
+    const s = meta?.byCode.get(String(sangwonCode)) ?? null;
+    return {
+      sourceMode: "file",
+      dataAsOf: meta?.dataAsOf ?? "unknown",
+      survivalGranularity: "unknown",
+      sangwon: {
+        code: sangwonCode,
+        name: s?.name ?? null,
+        category: s?.category ?? null,
+        gu: s?.gu ?? null,
+        dong: s?.dong ?? null,
+        lat: s?.lat ?? null,
+        lon: s?.lon ?? null,
+        footTraffic: null,
+      },
+      industries: [],
+      debug: {
+        externalUrl: `file://model-exports/by-sangwon.json.gz#${sangwonCode}`,
+        externalRequest: { sangwonCode },
+        externalResponse: {
+          note: "이 상권은 업종별 랭킹 사전계산 데이터가 없음 (지도 목록에는 존재)",
+          rankedSangwonCount: Object.keys(table).length,
+        },
+        externalStatus: 404,
+        externalDurationMs: durationMs,
+        error: null,
+      },
+    };
   }
   const trace: import("./contracts").DebugTrace = {
     externalUrl: `file://model-exports/by-sangwon.json.gz#${sangwonCode}`,
@@ -466,26 +893,42 @@ export async function heatmapViaFile(industryCode: string): Promise<HeatmapResul
 // ------------------------------------------------------------------
 // 메타 — 모델 서버(1차) → 배치 산출물 파일(2차)
 // ------------------------------------------------------------------
+/**
+ * Commercial-AI- 외부 계약:
+ *  - GET /meta/industries → 배열 [{industryCode, industryName, dataPeriod}]
+ *  - GET /meta/districts  → 배열 [{districtCode, districtName, districtType, gu, dong,
+ *                                  centerLat, centerLon, polygonAvailable}]
+ *  - dataAsOf 는 두 응답에 없으므로 /health 에서 가져온다.
+ *
+ * ⚠️ 옛 계약(/meta/sangwons, {industries:[...]} 래핑)과 달리 **둘 다 bare 배열**이다.
+ *    래핑을 가정하면 빈 배열이 되어 업종 드롭다운이 조용히 비므로 주의.
+ */
 export async function metaViaModel(): Promise<MetaResult> {
-  const [ind, sw]: any[] = await Promise.all([
+  const [ind, dist, health]: any[] = await Promise.all([
     fetchModel("/meta/industries"),
-    fetchModel("/meta/sangwons"),
+    fetchModel("/meta/districts"),
+    fetchModel("/health").catch(() => null),
   ]);
+  const industries = Array.isArray(ind) ? ind : [];
+  const districts = Array.isArray(dist) ? dist : [];
+  if (!industries.length || !districts.length) {
+    throw new Error("model server meta 응답이 비어 있음 (서빙 테이블 미로드 가능)");
+  }
   return {
     sourceMode: "live",
-    dataAsOf: String(ind?.dataAsOf ?? "unknown"),
-    industries: (ind?.industries ?? []).map((i: any) => ({
-      code: String(i.code),
-      name: String(i.name),
+    dataAsOf: String(health?.dataAsOf ?? "unknown"),
+    industries: industries.map((i: any) => ({
+      code: String(i.industryCode),
+      name: String(i.industryName),
     })),
-    sangwons: (sw?.sangwons ?? []).map((s: any) => ({
-      code: Number(s.code),
-      name: s.name ?? null,
-      category: s.category ?? null,
+    sangwons: districts.map((s: any) => ({
+      code: Number(s.districtCode),
+      name: s.districtName ?? null,
+      category: s.districtType ?? null,
       gu: s.gu ?? null,
       dong: s.dong ?? null,
-      lat: s.lat ?? null,
-      lon: s.lon ?? null,
+      lat: s.centerLat ?? null,
+      lon: s.centerLon ?? null,
     })),
   };
 }
