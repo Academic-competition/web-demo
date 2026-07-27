@@ -11,9 +11,31 @@ import type {
   AnalyzeResult,
   HeatmapResult,
   MetaResult,
+  SafetyScoresResult,
   TopIndustriesResult,
 } from "./contracts";
 import { inspect } from "./inspector";
+
+/** 자치구 안전점수 — '치안 반영' 토글용 (작고 정적이라 세션 내 1회 로드) */
+export function useSafetyScores() {
+  return useQuery<SafetyScoresResult>({
+    queryKey: ["safety-scores"],
+    queryFn: async () => {
+      const started = Date.now();
+      const res = await fetch("/api/safety");
+      if (!res.ok) throw new Error("안전점수 로드 실패");
+      const data: SafetyScoresResult = await res.json();
+      inspect(
+        data.sourceMode === "mock" ? "err" : "file",
+        `GET /api/safety — 자치구 ${Object.keys(data.byGu).length}개 안전점수 (${data.sourceMode}${data.sourceMode === "mock" ? " · 예시 데이터" : ` · ${data.year}`})`,
+        data.debug ?? { sourceMode: data.sourceMode },
+        Date.now() - started
+      );
+      return data;
+    },
+    staleTime: Infinity,
+  });
+}
 
 export function useMeta() {
   return useQuery<MetaResult>({

@@ -195,6 +195,32 @@ export const SafetyDetail = z.object({
 });
 export type SafetyDetail = z.infer<typeof SafetyDetail>;
 
+/**
+ * 자치구 안전 종합점수 (0~100, 높을수록 안전) — '치안 반영' 토글의 데이터 소스.
+ * 산식은 모델 정본(Commercial-AI- scoring_weights.yaml)과 동일:
+ *   0.50×(1−범죄율 백분위) + 0.25×검거율 백분위 + 0.25×CCTV밀도 백분위
+ * ⚠️ 자치구 단위 — 같은 구 안의 상권들은 전부 같은 점수를 받는다.
+ */
+export const SafetyScoresResult = z.object({
+  sourceMode: SourceMode,
+  /** 통계 기준 연도 — 목업이면 "예시" */
+  year: z.string(),
+  byGu: z.record(
+    z.string(),
+    z.object({
+      /** 안전 종합점수 0~100 (높을수록 안전) */
+      score: z.number(),
+      crimeRatePer100k: z.number().nullable(),
+      arrestRate: z.number().nullable(),
+      cctvPerKm2: z.number().nullable(),
+    })
+  ),
+  /** 산식·가중치 설명 (UI에 그대로 노출 — 정책값임을 명시) */
+  weightsNote: z.string(),
+  debug: DebugTrace.nullable().optional(),
+});
+export type SafetyScoresResult = z.infer<typeof SafetyScoresResult>;
+
 export const AnalyzeDetail = z.object({
   sales: SalesDetail.nullable(),
   store: StoreDetail.nullable(),

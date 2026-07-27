@@ -29,6 +29,7 @@ import type {
   AnalyzeResult,
   HeatmapResult,
   MetaResult,
+  SafetyScoresResult,
   TopIndustriesResult,
 } from "./contracts";
 import { gradeOf } from "./contracts";
@@ -955,4 +956,128 @@ export async function metaViaFile(): Promise<MetaResult> {
       lon: s.lon ?? null,
     })),
   };
+}
+
+// ------------------------------------------------------------------
+// 자치구 안전 종합점수 — '치안 반영' 토글의 데이터 소스
+//
+// 1차: model-exports/meta/safety-scores.json (실측 — tools/build_safety_scores.py 산출)
+// 2차: 결정적 목업 (자치구명 시드) — sourceMode:"mock" 으로 정직하게 표시
+// 산식·가중치는 모델 정본(Commercial-AI- config/scoring_weights.yaml)과 동일하게 유지.
+// ------------------------------------------------------------------
+const SAFETY_WEIGHTS_NOTE =
+  "안전점수 = 범죄율(10만명당, 낮을수록↑) 50% + 검거율 25% + CCTV밀도 25% — " +
+  "자치구 간 백분위 가중합(0~100). 가중치는 서비스 정책값이며 통계적으로 검증된 사실이 아닙니다.";
+
+/** 자치구명 시드 결정적 난수 (lib/mockExtras 와 동일 방식 — 서버 전용 복제) */
+function guSeedRandom(name: string): () => number {
+  let h = 2166136261;
+  for (let i = 0; i < name.length; i++) {
+    h ^= name.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  let a = h >>> 0;
+  return () => {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** 자치구 간 백분위(0~1) — 정본 compute_safety_score 의 percentile_score 와 동일 개념 */
+function percentileAmong(values: number[], v: number): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const below = sorted.filter((x) => x < v).length;
+  const equal = sorted.filter((x) => x === v).length;
+  return (below + equal * 0.5) / sorted.length;
+}
+
+function computeSafetyScores(
+  raw: Record<string, { crimeRatePer100k: number | null; arrestRate: number | null; cctvPerKm2: number | null }>
+): Record<string, { score: number; crimeRatePer100k: number | null; arrestRate: number | null; cctvPerKm2: number | null }> {
+  const gus = Object.keys(raw);
+  const cols = [
+    { key: "crimeRatePer100k" as const, weight: 0.5, higherBetter: false },
+    { key: "arrestRate" as const, weight: 0.25, higherBetter: true },
+    { key: "cctvPerKm2" as const, weight: 0.25, higherBetter: true },
+  ];
+  const out: Record<string, { score: number; crimeRatePer100k: number | null; arrestRate: number | null; cctvPerKm2: number | null }> = {};
+  for (const gu of gus) {
+    let acc = 0;
+    let wsum = 0;
+    let components = 0;
+    for (const c of cols) {
+      const v = raw[gu][c.key];
+      if (v == null) continue;
+      const vals = gus.map((g) => raw[g][c.key]).filter((x): x is number => x != null);
+      if (vals.length < 2) continue;
+      let p = percentileAmong(vals, v);
+      if (!c.higherBetter) p = 1 - p;
+      acc += p * c.weight;
+      wsum += c.weight;
+      components += 1;
+    }
+    // 정본 min_components=2 — 성분 부족 시 점수 미산출 대신 중립(50) 부여하지 않고 제외
+    if (components >= 2 && wsum > 0) {
+      out[gu] = { ...raw[gu], score: Math.round((acc / wsum) * 1000) / 10 };
+    }
+  }
+  return out;
+}
+
+export async function safetyScores(): Promise<SafetyScoresResult> {
+  const file = path.join(EXPORTS_DIR, "meta", "safety-scores.json");
+  const started = Date.now();
+
+  // ---- 1차: 실측 파일 ----
+  try {
+    const raw: any = JSON.parse(await fs.readFile(file, "utf-8"));
+    const byGu = raw.byGu ?? {};
+    return {
+      sourceMode: "file",
+      year: String(raw.year ?? "unknown"),
+      byGu,
+      weightsNote: SAFETY_WEIGHTS_NOTE,
+      debug: {
+        externalUrl: `file://model-exports/meta/safety-scores.json`,
+        externalRequest: null,
+        externalResponse: { guCount: Object.keys(byGu).length, year: raw.year },
+        externalStatus: 200,
+        externalDurationMs: Date.now() - started,
+        error: null,
+      },
+    };
+  } catch {
+    // ---- 2차: 결정적 목업 (자치구 목록은 실제 메타에서) ----
+    const meta = await metaViaFile();
+    const gus = [...new Set(meta.sangwons.map((s) => s.gu).filter((g): g is string => !!g))];
+    const rawByGu: Record<string, { crimeRatePer100k: number | null; arrestRate: number | null; cctvPerKm2: number | null }> = {};
+    for (const gu of gus) {
+      const rand = guSeedRandom(gu);
+      rawByGu[gu] = {
+        crimeRatePer100k: Math.round(600 + rand() * 900),   // 자치구 그럴듯한 범위의 가상값
+        arrestRate: Math.round((0.6 + rand() * 0.3) * 1000) / 1000,
+        cctvPerKm2: Math.round((20 + rand() * 140) * 10) / 10,
+      };
+    }
+    return {
+      sourceMode: "mock",
+      year: "예시",
+      byGu: computeSafetyScores(rawByGu),
+      weightsNote: SAFETY_WEIGHTS_NOTE,
+      debug: {
+        externalUrl: "mock://safety-scores (자치구명 시드 결정적 생성)",
+        externalRequest: null,
+        externalResponse: {
+          note: "범죄·CCTV 실데이터 미보유 — 예시 값. tools/build_safety_scores.py 로 교체 가능",
+          guCount: gus.length,
+        },
+        externalStatus: null,
+        externalDurationMs: Date.now() - started,
+        error: "safety-scores.json 없음 → 예시 데이터 폴백",
+      },
+    };
+  }
 }

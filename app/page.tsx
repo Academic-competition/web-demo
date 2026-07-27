@@ -19,7 +19,13 @@ import ResultPanel, {
 } from "@/components/ResultPanel";
 import TopIndustriesPanel from "@/components/TopIndustriesPanel";
 import { nearestSangwon, MAX_SNAP_METERS } from "@/lib/geo";
-import { useAnalyze, useHeatmap, useMeta, useTopIndustries } from "@/lib/hooks";
+import {
+  useAnalyze,
+  useHeatmap,
+  useMeta,
+  useSafetyScores,
+  useTopIndustries,
+} from "@/lib/hooks";
 import { inspect } from "@/lib/inspector";
 
 type Mode = "location" | "industry";
@@ -39,11 +45,15 @@ export default function Home() {
     suggestion: { code: number; name: string | null; distance: number } | null;
   } | null>(null);
   const [heatmapMetric, setHeatmapMetric] = useState<HeatmapMetric>("sales");
+  /** 종합점수에 자치구 안전점수 5%를 반영할지 — 사용자가 선택한다 (기본 미반영) */
+  const [safetyOn, setSafetyOn] = useState(false);
 
   /** 첫 분석 이후에는 조건 변경 시 자동 재질의 (재탐색 루프) */
   const hasAnalyzedRef = useRef(false);
 
-  const heatmap = useHeatmap(industryCode || null, mode === "industry");
+  // 히트맵: 업종 먼저 모드 + (리포트가 열려 있으면) 종합점수·순위 비교용으로도 로드
+  const heatmap = useHeatmap(industryCode || null, mode === "industry" || !!analyze.data);
+  const safety = useSafetyScores();
   // 상권 업종 랭킹 — 위치 먼저 모드의 중간 단계이자, 리포트의 '상권 내 기회 순위' 소스.
   // 업종 먼저 모드에서도 상권이 정해지면 순위 맥락을 위해 로드한다 (파일 캐시라 가벼움).
   const topIndustries = useTopIndustries(selectedCode);
@@ -62,6 +72,72 @@ export default function Home() {
       opportunityScore: sorted[idx].opportunityScore,
     };
   }, [topIndustries.data, analyze.data]);
+
+  // ---- 종합점수 (상권 간, 이 업종) — 치안 미반영/반영 두 버전을 미리 계산 ----
+  // base = 매출 백분위 60% + 생존율(셀 간 백분위) 40%  ← 가중치는 화면에 명시되는 정책값
+  // withSafety = base×95% + 자치구 안전점수×5%       ← 모델 정본(overall_diagnosis)과 동일 비중
+  const compositeScores = useMemo(() => {
+    const cells = heatmap.data?.cells;
+    if (!cells || !cells.length) return null;
+    const survVals = cells
+      .map((c) => c.survivalProbability)
+      .filter((v): v is number => v != null)
+      .sort((a, b) => a - b);
+    const survPct = (v: number): number | null => {
+      if (!survVals.length) return null;
+      let below = 0;
+      let equal = 0;
+      for (const x of survVals) {
+        if (x < v) below += 1;
+        else if (x === v) equal += 1;
+      }
+      return ((below + equal * 0.5) / survVals.length) * 100;
+    };
+    const base: Record<number, number> = {};
+    const withSafety: Record<number, number> = {};
+    for (const c of cells) {
+      const parts: { v: number; w: number }[] = [];
+      if (c.salesPercentile != null) parts.push({ v: c.salesPercentile, w: 0.6 });
+      const sp = c.survivalProbability != null ? survPct(c.survivalProbability) : null;
+      if (sp != null) parts.push({ v: sp, w: 0.4 });
+      if (!parts.length) continue;
+      const wsum = parts.reduce((a, p) => a + p.w, 0);
+      const b = parts.reduce((a, p) => a + p.v * p.w, 0) / wsum;
+      base[c.sangwonCode] = Math.round(b * 10) / 10;
+      const guScore = c.gu ? safety.data?.byGu[c.gu]?.score : undefined;
+      withSafety[c.sangwonCode] =
+        guScore != null ? Math.round((b * 0.95 + guScore * 0.05) * 10) / 10 : base[c.sangwonCode];
+    }
+    return { base, withSafety };
+  }, [heatmap.data, safety.data]);
+
+  const safetyIsMock = safety.data?.sourceMode === "mock";
+
+  // 리포트 ⑥ 치안 섹션의 이중 점수 카드 — 이 상권의 미반영/반영 점수·순위 비교
+  const scoreComparison = useMemo(() => {
+    const res = analyze.data;
+    const cs = compositeScores;
+    if (!res || res.status !== "ok" || !cs) return null;
+    if (heatmap.data?.industryCode !== res.industry.code) return null;
+    const code = res.sangwon.code;
+    const base = cs.base[code];
+    const adjusted = cs.withSafety[code];
+    if (base == null || adjusted == null) return null;
+    const rankOf = (map: Record<number, number>, v: number) =>
+      Object.values(map).filter((x) => x > v).length + 1;
+    const guInfo = res.sangwon.gu ? safety.data?.byGu[res.sangwon.gu] : undefined;
+    return {
+      base,
+      adjusted,
+      baseRank: rankOf(cs.base, base),
+      adjustedRank: rankOf(cs.withSafety, adjusted),
+      total: Object.keys(cs.base).length,
+      safetyScore: guInfo?.score ?? null,
+      guName: res.sangwon.gu ?? null,
+      isMock: safetyIsMock,
+      weightsNote: safety.data?.weightsNote ?? "",
+    };
+  }, [analyze.data, compositeScores, heatmap.data, safety.data, safetyIsMock]);
 
   const sangwons = meta.data?.sangwons ?? [];
   const industries = meta.data?.industries ?? [];
@@ -163,6 +239,15 @@ export default function Home() {
           sangwons={sangwons}
           heatmap={heatmap.data ?? null}
           heatmapMetric={heatmapMetric}
+          composite={
+            heatmapMetric === "composite" && compositeScores
+              ? {
+                  byCode: safetyOn ? compositeScores.withSafety : compositeScores.base,
+                  safetyOn,
+                  safetyIsMock: safetyIsMock,
+                }
+              : null
+          }
           selectedCode={selectedCode}
           pickedPoint={pickedPoint}
           onPickPoint={handlePickPoint}
@@ -244,30 +329,50 @@ export default function Home() {
 
           {/* 히트맵 색 기준 토글 (업종 먼저 모드) */}
           {mode === "industry" && industryCode && (
-            <div className="flex items-center gap-2 text-[11px]">
-              <span className="text-faint">히트맵 기준</span>
-              {(
-                [
-                  ["sales", "매출 백분위"],
-                  ["survival", "생존율"],
-                ] as const
-              ).map(([k, label]) => (
-                <button
-                  key={k}
-                  onClick={() => setHeatmapMetric(k)}
-                  className={`rounded-full border px-2.5 py-1 transition ${
-                    heatmapMetric === k
-                      ? "border-gold/60 bg-gold/10 text-gold-soft"
-                      : "border-line text-muted hover:border-gold/30"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-              {heatmapMetric === "survival" &&
-                heatmap.data?.survivalGranularity === "seoul_industry" && (
-                  <span className="text-faint">※ 업종 단위 통계 — 상권 간 동일</span>
-                )}
+            <div className="space-y-1.5">
+              <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                <span className="text-faint">히트맵 기준</span>
+                {(
+                  [
+                    ["sales", "매출 백분위"],
+                    ["survival", "생존율"],
+                    ["composite", "종합점수"],
+                  ] as const
+                ).map(([k, label]) => (
+                  <button
+                    key={k}
+                    onClick={() => setHeatmapMetric(k)}
+                    className={`rounded-full border px-2.5 py-1 transition ${
+                      heatmapMetric === k
+                        ? "border-gold/60 bg-gold/10 text-gold-soft"
+                        : "border-line text-muted hover:border-gold/30"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+                {heatmapMetric === "survival" &&
+                  heatmap.data?.survivalGranularity === "seoul_industry" && (
+                    <span className="text-faint">※ 업종 단위 통계 — 상권 간 동일</span>
+                  )}
+              </div>
+              {/* 치안 반영 토글 — 종합점수에서만 의미 (자치구 안전점수 5%) */}
+              {heatmapMetric === "composite" && (
+                <label className="flex cursor-pointer items-center gap-1.5 text-[11px] text-muted">
+                  <input
+                    type="checkbox"
+                    checked={safetyOn}
+                    onChange={(e) => setSafetyOn(e.target.checked)}
+                    className="h-3.5 w-3.5 accent-[#4ad6c0]"
+                  />
+                  치안 반영 <span className="text-faint">(자치구 안전점수 5% 가중)</span>
+                  {safetyIsMock && (
+                    <span className="rounded border border-caution/40 bg-caution/10 px-1 py-px text-[9px] text-caution">
+                      예시 데이터
+                    </span>
+                  )}
+                </label>
+              )}
             </div>
           )}
 
@@ -337,6 +442,7 @@ export default function Home() {
             <ResultPanel
               result={analyze.data}
               rankingContext={rankingContext}
+              scoreComparison={scoreComparison}
               onChangeIndustry={() => {
                 if (mode === "location") {
                   /* 위치 고정 — 업종 랭킹으로 되돌아가 다른 업종 선택 */

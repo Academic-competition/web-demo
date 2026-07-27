@@ -8,6 +8,7 @@ const nextConfig: NextConfig = {
     "/api/heatmap": ["./model-exports/**/*"],
     "/api/meta": ["./model-exports/**/*"],
     "/api/top-industries": ["./model-exports/**/*"],
+    "/api/safety": ["./model-exports/**/*"],
   },
 };
 

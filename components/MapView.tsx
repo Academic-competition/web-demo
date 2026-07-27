@@ -20,7 +20,16 @@ declare global {
 
 type Sangwon = MetaResult["sangwons"][number];
 
-export type HeatmapMetric = "sales" | "survival";
+export type HeatmapMetric = "sales" | "survival" | "composite";
+
+/** 종합점수 오버레이 — page 가 계산해 내려주는 상권코드→점수(0~100) 맵 */
+export type CompositeOverlay = {
+  byCode: Record<number, number>;
+  /** 치안(자치구 안전점수) 5% 반영 여부 — 범례 표기에 사용 */
+  safetyOn: boolean;
+  /** 안전점수가 예시 데이터인지 — 범례에 배지 */
+  safetyIsMock: boolean;
+};
 
 const SEOUL_CENTER = { lat: 37.5665, lng: 126.978 };
 const KAKAO_KEY = process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
@@ -35,12 +44,22 @@ function lerpColor(a: string, b: string, t: number): string {
   return `#${c.map((v) => v.toString(16).padStart(2, "0")).join("")}`;
 }
 
-function cellColor(cell: HeatmapResult["cells"][number], metric: HeatmapMetric): string {
+function cellColor(
+  cell: HeatmapResult["cells"][number],
+  metric: HeatmapMetric,
+  composite?: CompositeOverlay | null
+): string {
   if (metric === "survival") {
     if (cell.grade === "safe") return "#3ddc97";
     if (cell.grade === "caution") return "#f5b84b";
     if (cell.grade === "risk") return "#f0655d";
     return "#5b6683";
+  }
+  if (metric === "composite") {
+    const v = composite?.byCode[cell.sangwonCode];
+    if (v == null) return "#5b6683";
+    // 종합점수는 청록 계열로 — 매출(골드)과 시각적으로 구분
+    return lerpColor("#31456b", "#4ad6c0", Math.min(Math.max(v / 100, 0), 1));
   }
   const t = Math.min(Math.max((cell.salesPercentile ?? 0) / 100, 0), 1);
   return lerpColor("#3a486e", "#e3b65a", t);
@@ -79,6 +98,7 @@ export default function MapView({
   sangwons,
   heatmap,
   heatmapMetric,
+  composite,
   selectedCode,
   pickedPoint,
   onPickPoint,
@@ -88,6 +108,7 @@ export default function MapView({
   sangwons: Sangwon[];
   heatmap: HeatmapResult | null;
   heatmapMetric: HeatmapMetric;
+  composite?: CompositeOverlay | null;
   selectedCode: number | null;
   pickedPoint: { lat: number; lng: number } | null;
   onPickPoint: (lat: number, lng: number) => void;
@@ -102,6 +123,7 @@ export default function MapView({
         sangwons={sangwons}
         heatmap={heatmap}
         heatmapMetric={heatmapMetric}
+        composite={composite}
         selectedCode={selectedCode}
         onSelectSangwon={onSelectSangwon}
         reason={
@@ -126,6 +148,7 @@ export default function MapView({
       mode={mode}
       heatmap={heatmap}
       heatmapMetric={heatmapMetric}
+      composite={composite}
       sangwons={sangwons}
       selectedCode={selectedCode}
       pickedPoint={pickedPoint}
@@ -142,6 +165,7 @@ function KakaoMap({
   mode,
   heatmap,
   heatmapMetric,
+  composite,
   sangwons,
   selectedCode,
   pickedPoint,
@@ -151,6 +175,7 @@ function KakaoMap({
   mode: "location" | "industry";
   heatmap: HeatmapResult | null;
   heatmapMetric: HeatmapMetric;
+  composite?: CompositeOverlay | null;
   sangwons: Sangwon[];
   selectedCode: number | null;
   pickedPoint: { lat: number; lng: number } | null;
@@ -195,7 +220,7 @@ function KakaoMap({
 
     for (const cell of heatmap.cells) {
       if (cell.lat == null || cell.lon == null) continue;
-      const color = cellColor(cell, heatmapMetric);
+      const color = cellColor(cell, heatmapMetric, composite);
       const circle = new kakao.maps.Circle({
         center: new kakao.maps.LatLng(cell.lat, cell.lon),
         radius: 110,
@@ -210,7 +235,7 @@ function KakaoMap({
       circlesRef.current.push(circle);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, heatmap, heatmapMetric]);
+  }, [mode, heatmap, heatmapMetric, composite]);
 
   // 선택 상권 하이라이트 + 이동
   useEffect(() => {
@@ -274,6 +299,21 @@ function KakaoMap({
               <span className="inline-block h-2 w-16 rounded-full bg-gradient-to-r from-[#3a486e] to-gold" />
               <span className="text-faint">낮음 → 높음</span>
             </div>
+          ) : heatmapMetric === "composite" ? (
+            <div>
+              <div className="flex items-center gap-2">
+                <span>종합점수{composite?.safetyOn ? " · 치안 반영" : ""}</span>
+                <span className="inline-block h-2 w-16 rounded-full bg-gradient-to-r from-[#31456b] to-[#4ad6c0]" />
+                <span className="text-faint">낮음 → 높음</span>
+              </div>
+              <div className="mt-1 text-[9.5px] text-faint">
+                매출 60% + 생존 40%
+                {composite?.safetyOn && " → ×95% + 자치구 안전점수 5%"}
+                {composite?.safetyOn && composite?.safetyIsMock && (
+                  <span className="ml-1 text-caution">(안전점수: 예시 데이터)</span>
+                )}
+              </div>
+            </div>
           ) : (
             <div className="flex items-center gap-3">
               <span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-safe" />양호</span>
@@ -300,6 +340,7 @@ function FallbackPicker({
   sangwons,
   heatmap,
   heatmapMetric,
+  composite,
   selectedCode,
   onSelectSangwon,
   reason,
@@ -308,6 +349,7 @@ function FallbackPicker({
   sangwons: Sangwon[];
   heatmap: HeatmapResult | null;
   heatmapMetric: HeatmapMetric;
+  composite?: CompositeOverlay | null;
   selectedCode: number | null;
   onSelectSangwon: (code: number) => void;
   reason: string;
@@ -316,11 +358,13 @@ function FallbackPicker({
 
   const rows = useMemo(() => {
     if (mode === "industry" && heatmap) {
-      const sorted = [...heatmap.cells].sort((a, b) =>
+      const metricValue = (c: HeatmapResult["cells"][number]): number =>
         heatmapMetric === "sales"
-          ? (b.salesPercentile ?? 0) - (a.salesPercentile ?? 0)
-          : (b.survivalProbability ?? 0) - (a.survivalProbability ?? 0)
-      );
+          ? c.salesPercentile ?? 0
+          : heatmapMetric === "composite"
+            ? composite?.byCode[c.sangwonCode] ?? -1
+            : c.survivalProbability ?? 0;
+      const sorted = [...heatmap.cells].sort((a, b) => metricValue(b) - metricValue(a));
       return sorted
         .filter(
           (c) =>
@@ -336,8 +380,12 @@ function FallbackPicker({
           chip:
             heatmapMetric === "sales"
               ? `상위 ${(100 - (c.salesPercentile ?? 0)).toFixed(0)}%`
-              : `${(((c.survivalProbability ?? 0) * 100)).toFixed(0)}%`,
-          color: cellColor(c, heatmapMetric),
+              : heatmapMetric === "composite"
+                ? composite?.byCode[c.sangwonCode] != null
+                  ? `${composite.byCode[c.sangwonCode].toFixed(0)}점`
+                  : "―"
+                : `${(((c.survivalProbability ?? 0) * 100)).toFixed(0)}%`,
+          color: cellColor(c, heatmapMetric, composite),
         }));
     }
     return sangwons
@@ -356,7 +404,7 @@ function FallbackPicker({
         chip: s.category ?? "",
         color: "#3a486e",
       }));
-  }, [mode, sangwons, heatmap, heatmapMetric, query]);
+  }, [mode, sangwons, heatmap, heatmapMetric, composite, query]);
 
   return (
     <div className="flex h-full flex-col bg-ink-900">
@@ -373,7 +421,12 @@ function FallbackPicker({
         {mode === "industry" && heatmap && (
           <div className="mt-2 text-[11px] text-muted">
             {heatmap.industryName ?? heatmap.industryCode} ·{" "}
-            {heatmapMetric === "sales" ? "매출 백분위" : "생존율"} 순 정렬
+            {heatmapMetric === "sales"
+              ? "매출 백분위"
+              : heatmapMetric === "composite"
+                ? `종합점수${composite?.safetyOn ? "(치안 반영)" : ""}`
+                : "생존율"}{" "}
+            순 정렬
           </div>
         )}
       </div>

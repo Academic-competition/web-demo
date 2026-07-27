@@ -89,6 +89,23 @@ export type RankingContext = {
   opportunityScore: number;
 };
 
+/**
+ * 이중 종합점수 — '치안 반영' 토글의 리포트 버전 (page 가 계산해 내려준다).
+ * base = 매출60%+생존40% 백분위, adjusted = base×95% + 자치구 안전점수×5%.
+ * 순위는 동일 업종 상권 간 비교.
+ */
+export type ScoreComparison = {
+  base: number;
+  adjusted: number;
+  baseRank: number;
+  adjustedRank: number;
+  total: number;
+  safetyScore: number | null;
+  guName: string | null;
+  isMock: boolean;
+  weightsNote: string;
+};
+
 // ------------------------------------------------------------------
 // 상태 화면들
 // ------------------------------------------------------------------
@@ -328,12 +345,15 @@ function Bullet({ tag, children }: { tag: string; children: React.ReactNode }) {
 export default function ResultPanel({
   result,
   rankingContext,
+  scoreComparison,
   onChangeIndustry,
   onChangeLocation,
 }: {
   result: AnalyzeResult;
   /** 상권 내 업종 기회 순위 (지역 랭킹 데이터 보유 시) */
   rankingContext?: RankingContext | null;
+  /** 치안 미반영/반영 이중 종합점수 (동일 업종 상권 간 — 히트맵 데이터 보유 시) */
+  scoreComparison?: ScoreComparison | null;
   onChangeIndustry: () => void;
   onChangeLocation: () => void;
 }) {
@@ -872,6 +892,61 @@ export default function ResultPanel({
               <div className="mb-3 rounded-md border border-caution/40 bg-caution/10 px-2.5 py-2 text-[10px] leading-relaxed text-caution">
                 ⚠ 예시 데이터 — 범죄 통계 CSV(자치구별 5대 범죄) 미보유로 자치구명 기반 가상
                 수치를 표시합니다. 실데이터 연동 시 경찰청 연간 통계로 대체됩니다.
+              </div>
+            )}
+
+            {/* 치안 반영 이중 점수 — "포함하면 무엇이 달라지는가"를 사용자가 직접 비교 */}
+            {scoreComparison && (
+              <div className="mb-3 rounded-lg border border-[#4ad6c0]/30 bg-[#4ad6c0]/5 px-3.5 py-3">
+                <div className="mb-2 flex items-center gap-1.5">
+                  <span className="text-[10px] font-semibold text-[#4ad6c0]">
+                    치안 반영 시 종합점수는 이렇게 달라집니다
+                  </span>
+                  {scoreComparison.isMock && (
+                    <span className="rounded border border-caution/40 bg-caution/10 px-1 py-px text-[9px] text-caution">
+                      안전점수: 예시
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="flex-1">
+                    <div className="text-[9.5px] text-faint">미반영 (매출 60 + 생존 40)</div>
+                    <div className="text-lg font-semibold text-fg" style={{ fontFamily: "var(--font-numeric)" }}>
+                      {scoreComparison.base.toFixed(1)}
+                      <span className="ml-1 text-[10px] text-muted">
+                        {scoreComparison.baseRank.toLocaleString()}위/{scoreComparison.total.toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                  <span className="shrink-0 text-base text-faint">→</span>
+                  <div className="flex-1">
+                    <div className="text-[9.5px] text-faint">반영 (×95% + 안전점수 5%)</div>
+                    <div className="text-lg font-semibold text-[#4ad6c0]" style={{ fontFamily: "var(--font-numeric)" }}>
+                      {scoreComparison.adjusted.toFixed(1)}
+                      <span
+                        className={`ml-1 text-[10px] ${
+                          scoreComparison.adjustedRank < scoreComparison.baseRank
+                            ? "text-safe"
+                            : scoreComparison.adjustedRank > scoreComparison.baseRank
+                              ? "text-caution"
+                              : "text-muted"
+                        }`}
+                      >
+                        {scoreComparison.adjustedRank.toLocaleString()}위
+                        {scoreComparison.adjustedRank !== scoreComparison.baseRank &&
+                          ` (${scoreComparison.adjustedRank < scoreComparison.baseRank ? "▲" : "▼"}${Math.abs(scoreComparison.baseRank - scoreComparison.adjustedRank)})`}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-1.5 text-[10px] text-muted">
+                  {scoreComparison.guName ?? "자치구"} 안전점수{" "}
+                  <b className="text-fg/90" style={{ fontFamily: "var(--font-numeric)" }}>
+                    {scoreComparison.safetyScore != null ? scoreComparison.safetyScore.toFixed(1) : "―"}
+                  </b>
+                  /100 · 순위는 동일 업종 상권 {scoreComparison.total.toLocaleString()}곳 기준 ·
+                  지도의 <b className="text-fg/80">종합점수 + 치안 반영</b> 토글과 같은 산식
+                </div>
               </div>
             )}
             <div className="grid grid-cols-2 gap-2">
