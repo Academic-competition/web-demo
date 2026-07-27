@@ -1,0 +1,201 @@
+# 미해결 과제 · 인계 문서
+
+> 다른 세션/사람이 이어받을 수 있도록 **남은 문제와 해결 방법**을 정리한 문서.
+> 최종 갱신: 2026-07-28
+
+## ⚠️ 먼저 알아야 할 것 — 저장소가 3개다
+
+| 저장소 | 원격 | 상태 |
+|---|---|---|
+| `sanggwon-web/` (이 레포) | `Academic-competition/web-demo` | 푸시됨 |
+| `Commercial-AI-/` (모델 정본) | `Academic-competition/Commercial-AI-` | 팀원 소유. 수정 전 합의 필요 |
+| `academy/` (루트, 문서) | **없음** | **커밋도 안 됨 — 로컬 전용** |
+
+**루트 저장소에 원격이 없다.** 그래서 `academy/CLAUDE.md`, `academy/files/DATA_REQUIREMENTS.md`,
+`academy/README.md` 는 **이 레포를 clone 해도 볼 수 없다.** 아래 §0 에 핵심만 옮겨 뒀다.
+루트 저장소를 살릴지(원격 생성) 문서를 이 레포로 옮길지는 미결정이다.
+
+---
+
+## 0. 옮겨온 핵심 컨텍스트 (루트 문서가 없어도 작업 가능하게)
+
+### 데이터 재현 절차
+
+```bash
+# academy 루트에서. SEOUL_API_KEY 는 서울 열린데이터광장 무료 발급
+Commercial-AI-/.venv/Scripts/python.exe Commercial-AI-/scripts/collect_data.py
+Commercial-AI-/.venv/Scripts/python.exe Commercial-AI-/scripts/build_features.py
+Commercial-AI-/.venv/Scripts/python.exe sanggwon-web/tools/prepare_feature_table.py
+Commercial-AI-/.venv/Scripts/python.exe Commercial-AI-/scripts/build_serving_table.py
+Commercial-AI-/.venv/Scripts/python.exe sanggwon-web/tools/export_web_static.py   # → model-exports/
+```
+
+- `scripts/train_model.py` 는 **실행하지 말 것** — 실데이터 189,411행 학습본을 덮어쓴다
+- Python 은 시스템에 없다. `Commercial-AI-/.venv` (uv 로 생성) 사용
+- `export_web_static.py` 는 **결정적**이다 (gzip mtime=0). 재실행 후 git diff 가 비어야 정상 —
+  비어있지 않으면 데이터가 실제로 바뀐 것이다
+
+### 되돌리면 안 되는 결정
+
+- **생존율은 예측이 아니라 실측 폐업률 환산** `(1−분기폐업률)^12`, 3년 고정.
+  **축소추정(k=20) 필수** — 안 하면 76.8% 가 정확히 100% 로 표시된다
+  (상권×업종 점포 수 중앙값이 2개인 소표본 artifact)
+- **매출은 점포당 예측값**, 상권 합산이 아니다. `scaleNote`/`scaleLabel` 을 서버가 주입한다.
+  UI 에 집계수준을 하드코딩하면 한 리포트에서 문구가 모순된다 (실제 발생함)
+- **점포 수 전체 = `유사_업종_점포_수`** (`점포_수` 는 프랜차이즈 제외).
+  원천에서 `점포_수 + 프랜차이즈_점포_수 == 유사_업종_점포_수` 가 767,251행 전부 성립
+- **신호등 판정은 웹 route handler 책임** (safe≥0.60 / caution≥0.45)
+- **라이브는 옵트인** (`MODEL_SERVER_URL` 미설정 = 정적 사용)
+
+### 데이터 함정
+
+- 분기 컬럼은 영문 `STDR_YYQU_CD` 만 자동 분리된다. 한글 헤더 CSV 의 `기준_년분기_코드` 는
+  처리하지 않아 즉시 예외 → **API 로 받을 것**
+- 좌표계는 **EPSG:5181** (m 평면). 위경도를 넣으면 최근접 매핑·지도가 깨진다
+- 학습본이 외부 피처 6개(`re_*`/`sf_*`)를 요구한다. 값이 아니라 **컬럼**이 필요해
+  `prepare_feature_table.py` 가 NaN 으로 채운다 (0/평균 대치 금지)
+- `data/raw/sales.csv` ≈101MB → GitHub 100MB 제한. `Commercial-AI-/.gitignore` 에서 `data/` 무시
+
+---
+
+## 1. 🔴 안전점수가 실데이터가 아니다
+
+**현상**: `/api/safety` 가 `sourceMode: "mock"`, `year: "예시"` 로 응답한다.
+자치구명을 시드로 한 결정적 가상값이며, **'치안 반영' 토글이 가상 수치로 순위를 바꾼다.**
+기본값이 미반영이고 배지가 붙으므로 정직성 위반은 아니지만, 토글이 의미 있는 정보를 주지 않는다.
+
+**원인**: `model-exports/meta/safety-scores.json` 이 없다.
+
+**해결**: 아래 CSV 를 구해 변환 스크립트를 돌린다.
+
+```bash
+python tools/build_safety_scores.py --crime <5대범죄.csv> --pop <주민등록인구.csv> \
+       --cctv <CCTV.csv> --area <자치구면적.csv> --out model-exports/meta/safety-scores.json
+```
+
+| 필요 데이터 | 출처 | 단위 |
+|---|---|---|
+| 5대 범죄 발생·검거 | 서울 열린데이터광장 / 경찰청 | 자치구 × 연 |
+| 주민등록인구 | 서울 열린데이터광장 | 자치구 × 연 (10만명당 환산용) |
+| CCTV 설치 현황 | 서울시 | 자치구 |
+| 자치구 면적 | — | 자치구 (밀도 환산용) |
+
+산식은 모델 정본 `Commercial-AI-/config/scoring_weights.yaml` 과 동일하게 유지할 것:
+**범죄율(10만명당, 낮을수록↑) 50% + 검거율 25% + CCTV밀도 25%**.
+자동 수집은 구현되어 있지 않다 (`Commercial-AI-/scripts/collect_data.py:10`).
+
+**관련 파일**: `tools/build_safety_scores.py`, `lib/normalize.ts` 의 `safetyScores()`,
+`app/api/safety/route.ts`
+
+---
+
+## 2. 🔴 예상 매출이 과대 추정된다 (재학습 필요)
+
+**현상**: 프랜차이즈 비중이 큰 업종에서 점포당 매출이 크게 과대.
+예) 이태원 관광특구 × 편의점 → 전체 매출을 24가 아니라 **4로 나눈** 값이 나온다.
+
+**원인**: 학습 타깃 `target_next_q_sales_per_store = 매출 ÷ 점포_수` 인데,
+`점포_수`(`STOR_CO`)는 전체가 아니라 **일반(비프랜차이즈) 점포 수**다.
+같은 이유로 `프랜차이즈_비율 = 프랜차이즈_점포_수 / 점포_수` 가 1.0 을 넘는다(최대 1400%).
+
+**현재 대응**: 점포 수·프랜차이즈 비율은 웹에서 역산 보정하고
+(`lib/normalize.ts` 의 `correctStoreCounts()`) 보정 사실을 UI 3곳에 노출한다.
+정적 산출물은 `유사_업종_점포_수` 를 직접 써서 애초에 올바르다.
+**매출은 학습 타깃이라 웹에서 고칠 수 없다** — `scaleNote` 로 한계만 밝힌다.
+
+**근본 해결** (팀원 합의 + 재학습):
+
+1. `Commercial-AI-/src/features/build.py:99` — 프랜차이즈 비율 분모를 `유사_업종_점포_수` 로
+2. `Commercial-AI-/src/features/schema.py` — 타깃 분모도 `유사_업종_점포_수` 로
+3. `scripts/train_model.py` 재학습 → `models/sales_model.pkl` 갱신 (**기존 학습본 백업 먼저**)
+4. `scripts/build_serving_table.py` + `tools/export_web_static.py` 재생성
+5. `lib/normalize.ts` 의 `correctStoreCounts()` 제거 (이중 보정 방지) + `contracts.ts` 의
+   `competition.correction` 정리
+
+원본 데이터가 확보돼 있으므로 재학습이 가능하다. 아래 §3 과 함께 진행하면 좋다.
+
+---
+
+## 3. 🟡 ML 이 나이브 베이스라인에 열세
+
+`Commercial-AI-/models/model_metadata.json` → `"ml_beats_baseline_on_test": false`.
+test MAE 13,776,289(LightGBM) vs **13,572,510**("지난 분기와 같다"). SMAPE·R² 도 베이스라인 우세.
+
+정직하게 기록되어 있다는 점은 강점이지만, 모델 성능이 평가 항목이면 최대 리스크다.
+`scripts/tune_model.py` 가 존재하나 **실행된 적 없다** (metadata 에 `tuning` 키 없음).
+§2 의 타깃 분모 수정과 함께 재학습하면 개선 여지가 있다.
+
+---
+
+## 4. 🟡 `meta.sources` 가 쓰이지 않은 출처까지 나열한다
+
+외부(부동산·치안) 데이터 없이 파이프라인을 돌려도 모델 서버가 R-ONE·경찰청·CCTV 를
+계속 출처로 나열한다. 값은 `null` 로 정직하지만 **출처 목록은 사실과 다르다.**
+
+**원인**: `Commercial-AI-/api/dependencies.py` 가 `exports/meta/external_columns.json` 을
+기동 시 그대로 읽고, `build_features.py` 는 외부 컬럼이 없으면 이 파일을 갱신하지 않아
+과거 값이 남는다.
+
+**해결**: 서버에서 실제 값 유무로 필터링하거나, 외부 컬럼이 없을 때 이 파일을 비우도록
+`build_features.py` 를 수정. 모델 저장소 수정이라 합의 필요.
+
+---
+
+## 5. 🟡 라이브 경로가 정적보다 열등하다 (엔드포인트 부재)
+
+`MODEL_SERVER_URL` 을 켜면 아래가 안 된다. **데이터 문제가 아니라 API 부재**다.
+
+| 기능 | 라이브에서 안 되는 이유 | 모델 쪽 필요 작업 |
+|---|---|---|
+| 히트맵 생존율 | `/heatmap/{code}` 응답에 `closureRate` 가 없다 | `HeatmapItem` 에 필드 1개 추가 (~2줄) |
+| 지역 우선 플로우 | 상권→업종 랭킹 엔드포인트가 없다 (`/recommendations` 는 반대 방향) | 신규 엔드포인트 |
+| 추이·요일/시간대 차트 | 서빙 테이블이 최신 분기 스냅샷이라 시계열이 없다 | 별도 export 또는 엔드포인트 |
+
+또 라이브 생존율은 **단일 분기 관측**만 쓸 수 있어 정적(10분기 누적 축소추정)보다 거칠다.
+같은 상권×업종이 라이브 84.2% / 정적 97.0% 처럼 갈릴 수 있다.
+**그래서 로컬 기본값을 정적으로 맞춰 뒀다** (배포와 동일 동작).
+
+---
+
+## 6. 🟡 상주인구·직장인구 미수집 → 상권 유형 3종만 존재
+
+`Commercial-AI-/config/data_sources.yaml:62,71` 의 서비스명이 `verified: false` 라
+자동 수집 대상에서 제외되어 있다 (`VwsmTrdarRepopQq` / `VwsmTrdarWrcPopltnQq`).
+
+결과: `총_상주인구_수`·`총_직장인구_수` 가 전부 결측 → 상권 유형 분류가 축소 규칙으로
+폴백해 **주거형·직장형이 배정되지 않는다** (혼합형/유동형/주말·여가형 3종만).
+
+**해결**: 실제 API 응답으로 서비스명을 검증한 뒤 수집에 추가.
+
+---
+
+## 7. 🟢 자잘한 것들
+
+- **ESLint 오류 6건 + 경고 2건** — 전부 `react-hooks/refs`(렌더 중 ref 읽기/쓰기)와
+  `set-state-in-effect`. `app/page.tsx:470`(×3), `components/MapView.tsx:79,191,193`.
+  Next 16 은 빌드에서 lint 를 돌리지 않아 배포는 통과한다. 고치려면 ref → state 전환이나
+  `useSyncExternalStore` 로 구조 변경이 필요해 동작 영향을 검토해야 한다
+- **업종 랭킹이 없는 상권 5개** — 모든 업종이 표본 부족인 상권(`종로5가역 4번`,
+  `배꽃어린이공원`, `연희지하차도`, `문래역 3번`, `마천공원`). 빈 목록 + 사유 안내로
+  처리되며 업종 직접 선택 경로가 열린다. 데이터가 없어 구조적으로 해결 불가
+- **배후지 분석(⑦)** 전체가 `lib/mockExtras.ts` 목업 — 상주인구·소득·임대시세 데이터셋 미연동
+- **`Commercial-AI-` 미커밋 25건** — `.gitignore`(신규, `data/` 무시로 101MB 푸시 차단 해결) +
+  이미 추적 중인 `__pycache__` 24건. 후자는 `git rm -r --cached "**/__pycache__"` 로
+  정리 가능하나 팀원 레포 인덱스를 바꾸는 일이라 보류 중
+- **`tools/` 가 이 레포에 있는 이유** — 루트 저장소에 원격이 없어서, 배포 데이터를 만드는
+  스크립트가 어디에도 푸시되지 않는 상태였다. 재현성을 위해 이 레포로 옮겼다.
+  `prepare_feature_table.py` 는 개념상 모델 저장소 소속이지만 같은 이유로 여기 있다
+
+---
+
+## 8. 배포 체크리스트 (Vercel)
+
+- [ ] **`NEXT_PUBLIC_KAKAO_MAP_KEY`** 를 Vercel 프로젝트 환경변수에 등록.
+      `NEXT_PUBLIC_*` 는 **빌드 시점 인라인**이라 `.env.local` 은 올라가지 않는다.
+      없으면 지도 대신 상권 검색 리스트 폴백으로 뜬다. **변수 추가 후 재배포 필요**
+- [ ] 카카오 개발자 콘솔 → Web 플랫폼에 **배포 도메인 등록** (없으면 `ERR_BLOCKED_BY_ORB`).
+      curl 은 Referer 가 없어 성공하므로 브라우저로 진단할 것
+- [ ] `MODEL_SERVER_URL` 은 **비워 둘 것** (Vercel 에 모델 서버가 없다. 설정하면 매 요청마다
+      실패할 fetch 를 낭비한다)
+- [ ] `model-exports/` 가 커밋되어 있고 `next.config.ts` 의 `outputFileTracingIncludes` 에
+      5개 라우트(`analyze`/`heatmap`/`meta`/`top-industries`/`safety`)가 모두 있는지 확인

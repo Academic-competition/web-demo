@@ -15,7 +15,10 @@ pnpm dev        # http://localhost:3000
 ```
 
 **모델 서버 없이도 실데이터로 동작한다.** `model-exports/` 에 담긴 정적 산출물
-(62업종 × 1,570상권, `../tools/export_web_static.py` 산출)이 기본 소스다.
+(62업종 × 1,570상권, [`tools/export_web_static.py`](tools/export_web_static.py) 산출)이 기본 소스다.
+
+> 남은 과제·인계 사항은 **[docs/OPEN-ITEMS.md](docs/OPEN-ITEMS.md)** 에 정리되어 있다
+> (안전점수 실데이터 미보유, 매출 과대 추정, 배포 체크리스트 등).
 
 라이브 모델 서버를 붙이려면 `.env.local` 의 `MODEL_SERVER_URL` 주석을 해제하고:
 
@@ -41,6 +44,31 @@ pnpm dev        # http://localhost:3000
 ⚠️ `NEXT_PUBLIC_*` 는 **빌드 시점에 인라인**된다. Vercel 은 `.env.local` 을 받지 않으므로
 프로젝트 환경변수에 직접 등록해야 지도가 뜬다.
 
+### 데이터 재생성 (`model-exports/`)
+
+`model-exports/` 는 커밋되어 배포에 함께 올라간다. 원본에서 다시 만들려면 모델 저장소
+(`Commercial-AI-`, 형제 디렉터리)와 그 `.venv` 가 필요하다.
+
+```bash
+# academy 루트에서. 스크립트는 cwd 와 무관하게 __file__ 기준으로 경로를 잡는다
+Commercial-AI-/.venv/Scripts/python.exe Commercial-AI-/scripts/build_features.py
+Commercial-AI-/.venv/Scripts/python.exe sanggwon-web/tools/prepare_feature_table.py
+Commercial-AI-/.venv/Scripts/python.exe Commercial-AI-/scripts/build_serving_table.py
+Commercial-AI-/.venv/Scripts/python.exe sanggwon-web/tools/export_web_static.py
+```
+
+| 스크립트 | 역할 |
+|---|---|
+| [`tools/export_web_static.py`](tools/export_web_static.py) | 서빙 테이블 + 원본 CSV → 정적 스키마. 생존율 축소추정·점포수 보정·요일/시간대/성별/연령 분해·5분기 추이를 여기서 구운다 |
+| [`tools/prepare_feature_table.py`](tools/prepare_feature_table.py) | 외부(부동산·치안) 데이터 없이 돌릴 때 학습본이 요구하는 컬럼 6개를 NaN 으로 보정. 없으면 서빙 테이블 생성이 `KeyError` 로 실패한다 |
+| [`tools/build_safety_scores.py`](tools/build_safety_scores.py) | 범죄·인구·CCTV CSV → `meta/safety-scores.json` (현재 미보유 → 목업 동작) |
+
+**출력은 결정적이다** (gzip 헤더 mtime 고정). 재실행 후 `git diff` 가 비어 있으면 데이터가
+그대로라는 뜻이고, 비어 있지 않으면 **실제로 값이 바뀐 것**이다.
+
+> 이 스크립트들이 모델 저장소가 아니라 이 레포에 있는 이유는
+> [docs/OPEN-ITEMS.md](docs/OPEN-ITEMS.md) §7 참조 (루트 저장소에 원격이 없어 재현성 확보 불가).
+
 ## 아키텍처
 
 브라우저는 모델 서버를 직접 호출하지 않고 항상 `/api/*` 를 경유한다.
@@ -65,7 +93,7 @@ flowchart TB
         PKL["models/sales_model.pkl<br/>LightGBM 점포당 매출 예측"]
     end
 
-    TOOL["../tools/export_web_static.py<br/>서빙 테이블 → 정적 스키마 변환"]
+    TOOL["tools/export_web_static.py<br/>서빙 테이블 → 정적 스키마 변환 (결정적)"]
     CSV[("서울 열린데이터광장<br/>상권분석 4종 · 10개 분기")]
 
     User --> UI --> RT --> NORM
