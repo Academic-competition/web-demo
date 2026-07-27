@@ -1,0 +1,82 @@
+<svg width="680" viewBox="0 0 680 776" role="img" xmlns="http://www.w3.org/2000/svg" font-family="'Pretendard','Malgun Gothic','Apple SD Gothic Neo',system-ui,sans-serif">
+<title>상권 데이터와 범죄 데이터가 웹 리포트까지 가는 전체 흐름</title>
+<desc>왼쪽은 상권 4종 CSV가 전처리, 모델 학습, 서빙테이블, 정적 산출물을 거쳐 웹 리포트에 도달하는 메인 파이프라인. 오른쪽은 자치구 단위 범죄·CCTV 통계가 별도 가공을 거쳐 안전점수가 되고, 정본 설계에서는 서빙테이블에, 현재 배포에서는 화면 계층에 합류하는 사이드 브랜치.</desc>
+<defs>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#888780"/></marker>
+</defs>
+
+<rect x="120" y="40" width="440" height="52" rx="8" fill="#F1EFE8" stroke="#B4B2A9"/>
+<text x="340" y="62" text-anchor="middle" font-size="13" font-weight="500" fill="#2C2C2A">서울 열린데이터광장 (+ 경찰청 통계)</text>
+<text x="340" y="80" text-anchor="middle" font-size="11" fill="#5F5E5A">CSV 다운로드 · Open API</text>
+<line x1="270" y1="94" x2="212" y2="118" stroke="#888780" stroke-width="1.5" marker-end="url(#ar)"/>
+<line x1="410" y1="94" x2="498" y2="118" stroke="#888780" stroke-width="1.5" marker-end="url(#ar)"/>
+
+<rect x="40" y="124" width="300" height="56" rx="8" fill="#E1F5EE" stroke="#5DCAA5"/>
+<text x="190" y="146" text-anchor="middle" font-size="13" font-weight="500" fill="#04342C">상권 원본 4종 — data/raw</text>
+<text x="190" y="166" text-anchor="middle" font-size="11" fill="#0F6E56">분기 × 상권 × 업종 단위</text>
+<line x1="190" y1="182" x2="190" y2="204" stroke="#888780" stroke-width="1.5" marker-end="url(#ar)"/>
+
+<rect x="430" y="124" width="210" height="56" rx="8" fill="#E1F5EE" stroke="#5DCAA5"/>
+<text x="535" y="146" text-anchor="middle" font-size="13" font-weight="500" fill="#04342C">범죄 · CCTV 통계</text>
+<text x="535" y="166" text-anchor="middle" font-size="11" fill="#0F6E56">자치구 × 연 단위</text>
+<line x1="535" y1="182" x2="535" y2="204" stroke="#888780" stroke-width="1.5" marker-end="url(#ar)"/>
+
+<rect x="40" y="208" width="300" height="56" rx="8" fill="#F1EFE8" stroke="#B4B2A9"/>
+<text x="190" y="230" text-anchor="middle" font-size="13" font-weight="500" fill="#2C2C2A">전처리 · 병합 · 피처 생성</text>
+<text x="190" y="250" text-anchor="middle" font-size="11" fill="#5F5E5A">결측·클리핑 · 파생지표</text>
+<line x1="190" y1="266" x2="190" y2="288" stroke="#888780" stroke-width="1.5" marker-end="url(#ar)"/>
+<polyline points="340,236 360,236 360,392 346,392" fill="none" stroke="#888780" stroke-width="1.5" marker-end="url(#ar)"/>
+
+<rect x="430" y="208" width="210" height="56" rx="8" fill="#F1EFE8" stroke="#B4B2A9"/>
+<text x="535" y="230" text-anchor="middle" font-size="13" font-weight="500" fill="#2C2C2A">전용 가공 — 별도 전처리</text>
+<text x="535" y="250" text-anchor="middle" font-size="11" fill="#5F5E5A">10만명당 환산 · 검거율</text>
+<line x1="535" y1="266" x2="535" y2="288" stroke="#888780" stroke-width="1.5" marker-end="url(#ar)"/>
+
+<rect x="40" y="292" width="300" height="56" rx="8" fill="#FAEEDA" stroke="#FAC775"/>
+<text x="190" y="314" text-anchor="middle" font-size="13" font-weight="500" fill="#412402">모델 학습</text>
+<text x="190" y="334" text-anchor="middle" font-size="11" fill="#854F0B">회귀모델 → sales_model.pkl</text>
+<line x1="190" y1="350" x2="190" y2="372" stroke="#888780" stroke-width="1.5" marker-end="url(#ar)"/>
+
+<rect x="430" y="292" width="210" height="56" rx="8" fill="#FAEEDA" stroke="#FAC775"/>
+<text x="535" y="314" text-anchor="middle" font-size="13" font-weight="500" fill="#412402">자치구 안전점수 0~100</text>
+<text x="535" y="334" text-anchor="middle" font-size="11" fill="#854F0B">백분위 가중합 · 25개 구</text>
+<polyline points="430,320 400,320 400,416 346,416" fill="none" stroke="#888780" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#ar)"/>
+<text x="406" y="374" text-anchor="start" font-size="11" fill="#888780">정본 설계 조인</text>
+<line x1="535" y1="348" x2="535" y2="548" stroke="#888780" stroke-width="1.5" marker-end="url(#ar)"/>
+
+<rect x="40" y="376" width="300" height="64" rx="8" fill="#F1EFE8" stroke="#B4B2A9"/>
+<text x="190" y="398" text-anchor="middle" font-size="13" font-weight="500" fill="#2C2C2A">서빙테이블</text>
+<rect x="56" y="408" width="98" height="20" rx="6" fill="#E1F5EE" stroke="#5DCAA5"/>
+<text x="105" y="422" text-anchor="middle" font-size="11" fill="#0F6E56">실측 컬럼</text>
+<rect x="162" y="408" width="116" height="20" rx="6" fill="#FAEEDA" stroke="#FAC775"/>
+<text x="220" y="422" text-anchor="middle" font-size="11" fill="#854F0B">예측·점수 컬럼</text>
+<line x1="190" y1="442" x2="190" y2="464" stroke="#888780" stroke-width="1.5" marker-end="url(#ar)"/>
+
+<rect x="40" y="468" width="300" height="56" rx="8" fill="#F1EFE8" stroke="#B4B2A9"/>
+<text x="190" y="490" text-anchor="middle" font-size="13" font-weight="500" fill="#2C2C2A">정적 산출물 exports/</text>
+<text x="190" y="510" text-anchor="middle" font-size="11" fill="#5F5E5A">미리 계산한 JSON → 커밋</text>
+<line x1="190" y1="526" x2="190" y2="548" stroke="#888780" stroke-width="1.5" marker-end="url(#ar)"/>
+
+<rect x="40" y="552" width="300" height="56" rx="8" fill="#F1EFE8" stroke="#B4B2A9"/>
+<text x="190" y="574" text-anchor="middle" font-size="13" font-weight="500" fill="#2C2C2A">/api/* — normalize 계층</text>
+<text x="190" y="594" text-anchor="middle" font-size="11" fill="#5F5E5A">신호등 판정 · 면책 주입</text>
+<line x1="190" y1="610" x2="190" y2="632" stroke="#888780" stroke-width="1.5" marker-end="url(#ar)"/>
+
+<rect x="430" y="552" width="210" height="56" rx="8" fill="#F1EFE8" stroke="#B4B2A9"/>
+<text x="535" y="574" text-anchor="middle" font-size="13" font-weight="500" fill="#2C2C2A">/api/safety — 현재 웹</text>
+<text x="535" y="594" text-anchor="middle" font-size="11" fill="#5F5E5A">화면에서 자치구 매칭 · 현재 예시</text>
+<polyline points="535,608 535,668 346,668" fill="none" stroke="#888780" stroke-width="1.5" marker-end="url(#ar)"/>
+
+<rect x="40" y="636" width="300" height="84" rx="8" fill="#F1EFE8" stroke="#B4B2A9"/>
+<text x="190" y="660" text-anchor="middle" font-size="13" font-weight="500" fill="#2C2C2A">리포트 · 히트맵 UI</text>
+<rect x="56" y="670" width="88" height="20" rx="6" fill="#E1F5EE" stroke="#5DCAA5"/>
+<text x="100" y="684" text-anchor="middle" font-size="11" fill="#0F6E56">실측 집계</text>
+<rect x="152" y="670" width="104" height="20" rx="6" fill="#FAEEDA" stroke="#FAC775"/>
+<text x="204" y="684" text-anchor="middle" font-size="11" fill="#854F0B">예측 · 점수</text>
+<rect x="264" y="670" width="64" height="20" rx="6" fill="#F1EFE8" stroke="#B4B2A9"/>
+<text x="296" y="684" text-anchor="middle" font-size="11" fill="#5F5E5A">예시</text>
+<text x="190" y="708" text-anchor="middle" font-size="11" fill="#5F5E5A">치안 반영 토글 — 사용자 선택 (5%)</text>
+
+<text x="340" y="748" text-anchor="middle" font-size="11" fill="#888780">초록 = 원천 숫자 그대로 · 노랑 = 모델·통계가 만든 숫자</text>
+<text x="340" y="766" text-anchor="middle" font-size="11" fill="#888780">점선 = 정본 설계의 합류 지점 · 실선 = 현재 배포된 경로</text>
+</svg>
