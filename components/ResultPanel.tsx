@@ -1098,9 +1098,11 @@ export default function ResultPanel({
           )}
           <li className="flex gap-1.5">
             <span className="text-faint">·</span>
-            치안 참고(⑥)는 <b className="text-fg/80">자치구 단위</b> 경찰청 통계로 상권별 차이를 반영하지 않습니다.{" "}
-            <b className="text-fg/80">창업기회점수·매출 예측에는 들어가지 않고</b>, 종합점수에만 사용자가
-            토글을 켤 때 5% 가중됩니다. 지역에 대한 단정적 판단의 근거로 사용하지 마세요.
+            치안 참고(⑥)는 <b className="text-fg/80">자치구 단위</b> 경찰청 통계로 상권별 차이를 반영하지 않습니다.
+            모델은 치안을 학습 피처로 쓰도록 설계돼 있으나{" "}
+            <b className="text-fg/80">현재 서빙 값이 비어 있어 예상 매출·창업기회점수에는 반영되지 않았고</b>,
+            지금 화면에서 작동하는 치안은 <b className="text-fg/80">종합점수 토글(사용자 선택, 5% 가중)</b> 뿐입니다.
+            지역에 대한 단정적 판단의 근거로 사용하지 마세요.
           </li>
           <li className="flex gap-1.5">
             <span className="text-faint">·</span>
