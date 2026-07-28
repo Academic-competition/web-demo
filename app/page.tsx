@@ -73,6 +73,12 @@ export default function Home() {
     };
   }, [topIndustries.data, analyze.data]);
 
+  /** 치안 실데이터를 쓸 때만 그 출처를 리포트 ⑨ 출처 목록에 덧붙인다 (목업이면 붙이지 않음) */
+  const extraSources = useMemo(
+    () => (safety.data?.sourceMode === "file" ? safety.data.sources ?? [] : []),
+    [safety.data]
+  );
+
   // ---- 종합점수 (상권 간, 이 업종) — 치안 미반영/반영 두 버전을 미리 계산 ----
   // base = 매출 백분위 60% + 생존율(셀 간 백분위) 40%  ← 가중치는 화면에 명시되는 정책값
   // withSafety = base×95% + 자치구 안전점수×5%       ← 모델 정본(overall_diagnosis)과 동일 비중
@@ -112,6 +118,29 @@ export default function Home() {
   }, [heatmap.data, safety.data]);
 
   const safetyIsMock = safety.data?.sourceMode === "mock";
+
+  /**
+   * 리포트 ⑥ 치안 타일용 — /api/safety 실데이터를 SafetyDetail 형태로 변환.
+   * 서빙(detail.safety)이 채워지면 그쪽이 우선이고, 이건 그 다음 순위다.
+   * 목업일 때는 null 을 주어 ResultPanel 의 예시 데이터 경로가 그대로 동작하게 한다.
+   */
+  const safetyFromScores = useMemo(() => {
+    const res = analyze.data;
+    const gu = res?.sangwon.gu;
+    const s = gu ? safety.data?.byGu[gu] : undefined;
+    if (!s || safetyIsMock || s.totalIncidents == null) return null;
+    return {
+      year: safety.data?.year ?? "unknown",
+      guName: gu ?? null,
+      totalIncidents: s.totalIncidents,
+      byType: s.byType ?? null,
+      rankAmongGus: s.rankAmongGus ?? null,
+      guCount: s.guCount ?? null,
+      seoulAvgIncidents: s.seoulAvgIncidents ?? null,
+      per100k: s.crimeRatePer100k,
+      granularity: "gu",
+    };
+  }, [analyze.data, safety.data, safetyIsMock]);
 
   // 리포트 ⑥ 치안 섹션의 이중 점수 카드 — 이 상권의 미반영/반영 점수·순위 비교
   const scoreComparison = useMemo(() => {
@@ -366,10 +395,17 @@ export default function Home() {
                     className="h-3.5 w-3.5 accent-[#4ad6c0]"
                   />
                   치안 반영 <span className="text-faint">(자치구 안전점수 5% 가중)</span>
-                  {safetyIsMock && (
+                  {safetyIsMock ? (
                     <span className="rounded border border-caution/40 bg-caution/10 px-1 py-px text-[9px] text-caution">
                       예시 데이터
                     </span>
+                  ) : (
+                    safety.data && (
+                      <span className="rounded border border-line bg-ink-700/60 px-1 py-px text-[9px] text-muted">
+                        실측 {safety.data.year}
+                        {safety.data.cctvYear ? ` · CCTV ${safety.data.cctvYear}` : ""}
+                      </span>
+                    )
                   )}
                 </label>
               )}
@@ -443,6 +479,8 @@ export default function Home() {
               result={analyze.data}
               rankingContext={rankingContext}
               scoreComparison={scoreComparison}
+              safetyFromScores={safetyFromScores}
+              extraSources={extraSources}
               onChangeIndustry={() => {
                 if (mode === "location") {
                   /* 위치 고정 — 업종 랭킹으로 되돌아가 다른 업종 선택 */

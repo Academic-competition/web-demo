@@ -203,20 +203,31 @@ export type SafetyDetail = z.infer<typeof SafetyDetail>;
  */
 export const SafetyScoresResult = z.object({
   sourceMode: SourceMode,
-  /** 통계 기준 연도 — 목업이면 "예시" */
+  /** 범죄 통계 기준 연도 — 목업이면 "예시" */
   year: z.string(),
+  /** CCTV 기준 연도 (성분에 포함됐을 때만) */
+  cctvYear: z.string().nullable().optional(),
   byGu: z.record(
     z.string(),
     z.object({
       /** 안전 종합점수 0~100 (높을수록 안전) */
       score: z.number(),
       crimeRatePer100k: z.number().nullable(),
+      /** 검거/발생 비 — 원본 그대로라 1.0 을 넘을 수 있다. '검거율'로 표시하지 말 것 */
       arrestRate: z.number().nullable(),
       cctvPerKm2: z.number().nullable(),
+      // ↓ 점수 성분이 아니라 리포트 ⑥ 타일용 원본 집계 (실데이터에만 존재)
+      totalIncidents: z.number().nullable().optional(),
+      byType: z.array(z.object({ label: z.string(), count: z.number() })).nullable().optional(),
+      rankAmongGus: z.number().nullable().optional(),
+      guCount: z.number().nullable().optional(),
+      seoulAvgIncidents: z.number().nullable().optional(),
     })
   ),
-  /** 산식·가중치 설명 (UI에 그대로 노출 — 정책값임을 명시) */
+  /** 산식·가중치 설명 — 실데이터면 산출 스크립트가 기록한 문구를 그대로 쓴다 */
   weightsNote: z.string(),
+  /** 실제 사용한 출처 (실데이터에만) */
+  sources: z.array(z.string()).nullable().optional(),
   debug: DebugTrace.nullable().optional(),
 });
 export type SafetyScoresResult = z.infer<typeof SafetyScoresResult>;

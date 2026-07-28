@@ -1,0 +1,811 @@
+{
+ "year": "2024",
+ "cctvYear": "2025",
+ "weights": {
+  "crimeRatePer100k": {
+   "weight": 0.5,
+   "higherBetter": false
+  },
+  "arrestRate": {
+   "weight": 0.25,
+   "higherBetter": true
+  },
+  "cctvPerKm2": {
+   "weight": 0.25,
+   "higherBetter": true
+  }
+ },
+ "minComponents": 2,
+ "weightsNote": "안전점수 = 범죄율(10만명당, 낮을수록↑) 50% + 검거 비율 25% + CCTV 밀도 25% — 자치구 간 백분위 가중합(0~100). 가중치는 서비스 정책값이며 통계적으로 검증된 사실이 아닙니다.",
+ "sources": [
+  "서울 열린데이터광장 — 자치구별 5대 범죄 발생·검거 (2024)",
+  "서울 열린데이터광장 — 자치구별 주민등록인구",
+  "서울시 — 자치구 범죄예방 CCTV 설치현황 (2025)"
+ ],
+ "byGu": {
+  "종로구": {
+   "crimeRatePer100k": 2020.9,
+   "arrestRate": 1.1747,
+   "cctvPerKm2": 120.7,
+   "score": 31.0,
+   "totalIncidents": 2765,
+   "byType": [
+    {
+     "label": "살인",
+     "count": 2
+    },
+    {
+     "label": "강도",
+     "count": 5
+    },
+    {
+     "label": "성범죄",
+     "count": 209
+    },
+    {
+     "label": "절도",
+     "count": 1183
+    },
+    {
+     "label": "폭력",
+     "count": 1366
+    }
+   ],
+   "rankAmongGus": 8,
+   "guCount": 25,
+   "seoulAvgIncidents": 3232.8
+  },
+  "중구": {
+   "crimeRatePer100k": 2509.3,
+   "arrestRate": 0.7377,
+   "cctvPerKm2": 287.2,
+   "score": 32.0,
+   "totalIncidents": 2955,
+   "byType": [
+    {
+     "label": "살인",
+     "count": 5
+    },
+    {
+     "label": "강도",
+     "count": 5
+    },
+    {
+     "label": "성범죄",
+     "count": 177
+    },
+    {
+     "label": "절도",
+     "count": 1398
+    },
+    {
+     "label": "폭력",
+     "count": 1370
+    }
+   ],
+   "rankAmongGus": 10,
+   "guCount": 25,
+   "seoulAvgIncidents": 3232.8
+  },
+  "용산구": {
+   "crimeRatePer100k": 1653.0,
+   "arrestRate": 0.745,
+   "cctvPerKm2": 153.5,
+   "score": 19.0,
+   "totalIncidents": 3322,
+   "byType": [
+    {
+     "label": "살인",
+     "count": 10
+    },
+    {
+     "label": "강도",
+     "count": 4
+    },
+    {
+     "label": "성범죄",
+     "count": 267
+    },
+    {
+     "label": "절도",
+     "count": 1082
+    },
+    {
+     "label": "폭력",
+     "count": 1959
+    }
+   ],
+   "rankAmongGus": 16,
+   "guCount": 25,
+   "seoulAvgIncidents": 3232.8
+  },
+  "성동구": {
+   "crimeRatePer100k": 769.6,
+   "arrestRate": 0.7133,
+   "cctvPerKm2": 251.2,
+   "score": 50.0,
+   "totalIncidents": 2117,
+   "byType": [
+    {
+     "label": "살인",
+     "count": 5
+    },
+    {
+     "label": "강도",
+     "count": 3
+    },
+    {
+     "label": "성범죄",
+     "count": 114
+    },
+    {
+     "label": "절도",
+     "count": 966
+    },
+    {
+     "label": "폭력",
+     "count": 1029
+    }
+   ],
+   "rankAmongGus": 4,
+   "guCount": 25,
+   "seoulAvgIncidents": 3232.8
+  },
+  "광진구": {
+   "crimeRatePer100k": 866.7,
+   "arrestRate": 0.7732,
+   "cctvPerKm2": 269.1,
+   "score": 57.0,
+   "totalIncidents": 2870,
+   "byType": [
+    {
+     "label": "살인",
+     "count": 2
+    },
+    {
+     "label": "강도",
+     "count": 6
+    },
+    {
+     "label": "성범죄",
+     "count": 235
+    },
+    {
+     "label": "절도",
+     "count": 1320
+    },
+    {
+     "label": "폭력",
+     "count": 1307
+    }
+   ],
+   "rankAmongGus": 9,
+   "guCount": 25,
+   "seoulAvgIncidents": 3232.8
+  },
+  "동대문구": {
+   "crimeRatePer100k": 914.8,
+   "arrestRate": 0.7718,
+   "cctvPerKm2": 281.4,
+   "score": 49.0,
+   "totalIncidents": 3216,
+   "byType": [
+    {
+     "label": "살인",
+     "count": 7
+    },
+    {
+     "label": "강도",
+     "count": 4
+    },
+    {
+     "label": "성범죄",
+     "count": 125
+    },
+    {
+     "label": "절도",
+     "count": 1617
+    },
+    {
+     "label": "폭력",
+     "count": 1463
+    }
+   ],
+   "rankAmongGus": 14,
+   "guCount": 25,
+   "seoulAvgIncidents": 3232.8
+  },
+  "중랑구": {
+   "crimeRatePer100k": 841.3,
+   "arrestRate": 0.7772,
+   "cctvPerKm2": 279.0,
+   "score": 62.0,
+   "totalIncidents": 3169,
+   "byType": [
+    {
+     "label": "살인",
+     "count": 5
+    },
+    {
+     "label": "강도",
+     "count": 2
+    },
+    {
+     "label": "성범죄",
+     "count": 143
+    },
+    {
+     "label": "절도",
+     "count": 1437
+    },
+    {
+     "label": "폭력",
+     "count": 1582
+    }
+   ],
+   "rankAmongGus": 13,
+   "guCount": 25,
+   "seoulAvgIncidents": 3232.8
+  },
+  "성북구": {
+   "crimeRatePer100k": 516.6,
+   "arrestRate": 0.8008,
+   "cctvPerKm2": 203.2,
+   "score": 82.0,
+   "totalIncidents": 2184,
+   "byType": [
+    {
+     "label": "살인",
+     "count": 3
+    },
+    {
+     "label": "강도",
+     "count": 1
+    },
+    {
+     "label": "성범죄",
+     "count": 146
+    },
+    {
+     "label": "절도",
+     "count": 884
+    },
+    {
+     "label": "폭력",
+     "count": 1150
+    }
+   ],
+   "rankAmongGus": 5,
+   "guCount": 25,
+   "seoulAvgIncidents": 3232.8
+  },
+  "강북구": {
+   "crimeRatePer100k": 821.1,
+   "arrestRate": 0.9004,
+   "cctvPerKm2": 187.9,
+   "score": 61.0,
+   "totalIncidents": 2289,
+   "byType": [
+    {
+     "label": "살인",
+     "count": 6
+    },
+    {
+     "label": "성범죄",
+     "count": 142
+    },
+    {
+     "label": "절도",
+     "count": 970
+    },
+    {
+     "label": "폭력",
+     "count": 1171
+    }
+   ],
+   "rankAmongGus": 6,
+   "guCount": 25,
+   "seoulAvgIncidents": 3232.8
+  },
+  "도봉구": {
+   "crimeRatePer100k": 582.1,
+   "arrestRate": 0.7921,
+   "cctvPerKm2": 141.3,
+   "score": 71.0,
+   "totalIncidents": 1741,
+   "byType": [
+    {
+     "label": "살인",
+     "count": 7
+    },
+    {
+     "label": "성범죄",
+     "count": 73
+    },
+    {
+     "label": "절도",
+     "count": 800
+    },
+    {
+     "label": "폭력",
+     "count": 861
+    }
+   ],
+   "rankAmongGus": 1,
+   "guCount": 25,
+   "seoulAvgIncidents": 3232.8
+  },
+  "노원구": {
+   "crimeRatePer100k": 642.7,
+   "arrestRate": 0.7768,
+   "cctvPerKm2": 108.4,
+   "score": 62.0,
+   "totalIncidents": 3101,
+   "byType": [
+    {
+     "label": "살인",
+     "count": 7
+    },
+    {
+     "label": "강도",
+     "count": 3
+    },
+    {
+     "label": "성범죄",
+     "count": 146
+    },
+    {
+     "label": "절도",
+     "count": 1508
+    },
+    {
+     "label": "폭력",
+     "count": 1437
+    }
+   ],
+   "rankAmongGus": 12,
+   "guCount": 25,
+   "seoulAvgIncidents": 3232.8
+  },
+  "은평구": {
+   "crimeRatePer100k": 708.4,
+   "arrestRate": 0.7656,
+   "cctvPerKm2": 175.7,
+   "score": 54.0,
+   "totalIncidents": 3217,
+   "byType": [
+    {
+     "label": "살인",
+     "count": 9
+    },
+    {
+     "label": "강도",
+     "count": 1
+    },
+    {
+     "label": "성범죄",
+     "count": 132
+    },
+    {
+     "label": "절도",
+     "count": 1517
+    },
+    {
+     "label": "폭력",
+     "count": 1558
+    }
+   ],
+   "rankAmongGus": 15,
+   "guCount": 25,
+   "seoulAvgIncidents": 3232.8
+  },
+  "서대문구": {
+   "crimeRatePer100k": 683.3,
+   "arrestRate": 0.7235,
+   "cctvPerKm2": 207.5,
+   "score": 57.0,
+   "totalIncidents": 2054,
+   "byType": [
+    {
+     "label": "살인",
+     "count": 3
+    },
+    {
+     "label": "성범죄",
+     "count": 131
+    },
+    {
+     "label": "절도",
+     "count": 1014
+    },
+    {
+     "label": "폭력",
+     "count": 906
+    }
+   ],
+   "rankAmongGus": 3,
+   "guCount": 25,
+   "seoulAvgIncidents": 3232.8
+  },
+  "마포구": {
+   "crimeRatePer100k": 1090.0,
+   "arrestRate": 0.7795,
+   "cctvPerKm2": 161.5,
+   "score": 35.0,
+   "totalIncidents": 3891,
+   "byType": [
+    {
+     "label": "살인",
+     "count": 4
+    },
+    {
+     "label": "강도",
+     "count": 4
+    },
+    {
+     "label": "성범죄",
+     "count": 503
+    },
+    {
+     "label": "절도",
+     "count": 1471
+    },
+    {
+     "label": "폭력",
+     "count": 1909
+    }
+   ],
+   "rankAmongGus": 20,
+   "guCount": 25,
+   "seoulAvgIncidents": 3232.8
+  },
+  "양천구": {
+   "crimeRatePer100k": 708.1,
+   "arrestRate": 0.7043,
+   "cctvPerKm2": 267.4,
+   "score": 57.0,
+   "totalIncidents": 3000,
+   "byType": [
+    {
+     "label": "살인",
+     "count": 4
+    },
+    {
+     "label": "강도",
+     "count": 1
+    },
+    {
+     "label": "성범죄",
+     "count": 109
+    },
+    {
+     "label": "절도",
+     "count": 1518
+    },
+    {
+     "label": "폭력",
+     "count": 1368
+    }
+   ],
+   "rankAmongGus": 11,
+   "guCount": 25,
+   "seoulAvgIncidents": 3232.8
+  },
+  "강서구": {
+   "crimeRatePer100k": 730.1,
+   "arrestRate": 0.851,
+   "cctvPerKm2": 107.2,
+   "score": 57.0,
+   "totalIncidents": 4008,
+   "byType": [
+    {
+     "label": "살인",
+     "count": 5
+    },
+    {
+     "label": "강도",
+     "count": 6
+    },
+    {
+     "label": "성범죄",
+     "count": 271
+    },
+    {
+     "label": "절도",
+     "count": 1670
+    },
+    {
+     "label": "폭력",
+     "count": 2056
+    }
+   ],
+   "rankAmongGus": 21,
+   "guCount": 25,
+   "seoulAvgIncidents": 3232.8
+  },
+  "구로구": {
+   "crimeRatePer100k": 882.4,
+   "arrestRate": 0.7291,
+   "cctvPerKm2": 252.0,
+   "score": 44.0,
+   "totalIncidents": 3378,
+   "byType": [
+    {
+     "label": "살인",
+     "count": 7
+    },
+    {
+     "label": "성범죄",
+     "count": 186
+    },
+    {
+     "label": "절도",
+     "count": 1572
+    },
+    {
+     "label": "폭력",
+     "count": 1613
+    }
+   ],
+   "rankAmongGus": 18,
+   "guCount": 25,
+   "seoulAvgIncidents": 3232.8
+  },
+  "금천구": {
+   "crimeRatePer100k": 905.7,
+   "arrestRate": 0.8478,
+   "cctvPerKm2": 282.0,
+   "score": 64.0,
+   "totalIncidents": 2017,
+   "byType": [
+    {
+     "label": "살인",
+     "count": 7
+    },
+    {
+     "label": "강도",
+     "count": 3
+    },
+    {
+     "label": "성범죄",
+     "count": 129
+    },
+    {
+     "label": "절도",
+     "count": 886
+    },
+    {
+     "label": "폭력",
+     "count": 992
+    }
+   ],
+   "rankAmongGus": 2,
+   "guCount": 25,
+   "seoulAvgIncidents": 3232.8
+  },
+  "영등포구": {
+   "crimeRatePer100k": 1122.6,
+   "arrestRate": 0.8032,
+   "cctvPerKm2": 195.5,
+   "score": 40.0,
+   "totalIncidents": 4167,
+   "byType": [
+    {
+     "label": "살인",
+     "count": 11
+    },
+    {
+     "label": "강도",
+     "count": 6
+    },
+    {
+     "label": "성범죄",
+     "count": 284
+    },
+    {
+     "label": "절도",
+     "count": 1791
+    },
+    {
+     "label": "폭력",
+     "count": 2075
+    }
+   ],
+   "rankAmongGus": 22,
+   "guCount": 25,
+   "seoulAvgIncidents": 3232.8
+  },
+  "동작구": {
+   "crimeRatePer100k": 659.3,
+   "arrestRate": 0.7172,
+   "cctvPerKm2": 222.9,
+   "score": 62.0,
+   "totalIncidents": 2454,
+   "byType": [
+    {
+     "label": "살인",
+     "count": 1
+    },
+    {
+     "label": "강도",
+     "count": 1
+    },
+    {
+     "label": "성범죄",
+     "count": 180
+    },
+    {
+     "label": "절도",
+     "count": 1085
+    },
+    {
+     "label": "폭력",
+     "count": 1187
+    }
+   ],
+   "rankAmongGus": 7,
+   "guCount": 25,
+   "seoulAvgIncidents": 3232.8
+  },
+  "관악구": {
+   "crimeRatePer100k": 937.4,
+   "arrestRate": 0.7839,
+   "cctvPerKm2": 208.4,
+   "score": 46.0,
+   "totalIncidents": 4485,
+   "byType": [
+    {
+     "label": "살인",
+     "count": 4
+    },
+    {
+     "label": "강도",
+     "count": 3
+    },
+    {
+     "label": "성범죄",
+     "count": 338
+    },
+    {
+     "label": "절도",
+     "count": 1971
+    },
+    {
+     "label": "폭력",
+     "count": 2169
+    }
+   ],
+   "rankAmongGus": 23,
+   "guCount": 25,
+   "seoulAvgIncidents": 3232.8
+  },
+  "서초구": {
+   "crimeRatePer100k": 911.6,
+   "arrestRate": 0.773,
+   "cctvPerKm2": 87.7,
+   "score": 30.0,
+   "totalIncidents": 3788,
+   "byType": [
+    {
+     "label": "살인",
+     "count": 10
+    },
+    {
+     "label": "강도",
+     "count": 5
+    },
+    {
+     "label": "성범죄",
+     "count": 364
+    },
+    {
+     "label": "절도",
+     "count": 1585
+    },
+    {
+     "label": "폭력",
+     "count": 1824
+    }
+   ],
+   "rankAmongGus": 19,
+   "guCount": 25,
+   "seoulAvgIncidents": 3232.8
+  },
+  "강남구": {
+   "crimeRatePer100k": 1102.0,
+   "arrestRate": 0.7483,
+   "cctvPerKm2": 186.4,
+   "score": 27.0,
+   "totalIncidents": 6107,
+   "byType": [
+    {
+     "label": "살인",
+     "count": 16
+    },
+    {
+     "label": "강도",
+     "count": 17
+    },
+    {
+     "label": "성범죄",
+     "count": 640
+    },
+    {
+     "label": "절도",
+     "count": 2097
+    },
+    {
+     "label": "폭력",
+     "count": 3337
+    }
+   ],
+   "rankAmongGus": 25,
+   "guCount": 25,
+   "seoulAvgIncidents": 3232.8
+  },
+  "송파구": {
+   "crimeRatePer100k": 795.9,
+   "arrestRate": 0.7325,
+   "cctvPerKm2": 126.0,
+   "score": 39.0,
+   "totalIncidents": 5174,
+   "byType": [
+    {
+     "label": "살인",
+     "count": 6
+    },
+    {
+     "label": "강도",
+     "count": 3
+    },
+    {
+     "label": "성범죄",
+     "count": 315
+    },
+    {
+     "label": "절도",
+     "count": 2502
+    },
+    {
+     "label": "폭력",
+     "count": 2348
+    }
+   ],
+   "rankAmongGus": 24,
+   "guCount": 25,
+   "seoulAvgIncidents": 3232.8
+  },
+  "강동구": {
+   "crimeRatePer100k": 670.3,
+   "arrestRate": 0.7493,
+   "cctvPerKm2": 193.0,
+   "score": 62.0,
+   "totalIncidents": 3350,
+   "byType": [
+    {
+     "label": "살인",
+     "count": 3
+    },
+    {
+     "label": "강도",
+     "count": 4
+    },
+    {
+     "label": "성범죄",
+     "count": 164
+    },
+    {
+     "label": "절도",
+     "count": 1662
+    },
+    {
+     "label": "폭력",
+     "count": 1517
+    }
+   ],
+   "rankAmongGus": 17,
+   "guCount": 25,
+   "seoulAvgIncidents": 3232.8
+  }
+ }
+}

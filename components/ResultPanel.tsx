@@ -9,7 +9,7 @@
  *
  * 상태: idle / loading(단계형) / insufficient_data(UC-004) / error(UC-006) / ok
  */
-import type { AnalyzeResult, Grade, RatioSlice } from "@/lib/contracts";
+import type { AnalyzeResult, Grade, RatioSlice, SafetyDetail } from "@/lib/contracts";
 import { formatKRW, formatKRWCompact, formatPeople, pctChange } from "@/lib/format";
 import { incomeDecileRange, mockHinterland, mockSafety } from "@/lib/mockExtras";
 import SurvivalGauge from "./SurvivalGauge";
@@ -346,6 +346,8 @@ export default function ResultPanel({
   result,
   rankingContext,
   scoreComparison,
+  safetyFromScores,
+  extraSources,
   onChangeIndustry,
   onChangeLocation,
 }: {
@@ -354,6 +356,10 @@ export default function ResultPanel({
   rankingContext?: RankingContext | null;
   /** 치안 미반영/반영 이중 종합점수 (동일 업종 상권 간 — 히트맵 데이터 보유 시) */
   scoreComparison?: ScoreComparison | null;
+  /** /api/safety 실데이터에서 파생한 치안 통계 (목업이면 null — 예시 경로로 폴백) */
+  safetyFromScores?: SafetyDetail | null;
+  /** 모델 응답 밖에서 실제로 사용한 추가 출처 (치안 실데이터 등) */
+  extraSources?: string[];
   onChangeIndustry: () => void;
   onChangeLocation: () => void;
 }) {
@@ -873,7 +879,8 @@ export default function ResultPanel({
 
       {/* ── ⑥ 치안 참고 — 자치구 5대 범죄 (기회점수 미반영) ── */}
       {(() => {
-        const real = detail?.safety ?? null;
+        // 실측 우선순위: 서빙 detail.safety → /api/safety 실데이터 → 예시(목업)
+        const real = detail?.safety ?? safetyFromScores ?? null;
         const s = real ?? mockSafety(result.sangwon.gu);
         const vsSeoul =
           s.totalIncidents != null && s.seoulAvgIncidents
@@ -887,6 +894,7 @@ export default function ResultPanel({
                   실측 통계
                 </span>
                 경찰청 5대 범죄 발생 현황 · {s.year}년 · {s.guName ?? "자치구"} 기준
+                {scoreComparison && !scoreComparison.isMock && " · 안전점수 실측 반영"}
               </div>
             ) : (
               <div className="mb-3 rounded-md border border-caution/40 bg-caution/10 px-2.5 py-2 text-[10px] leading-relaxed text-caution">
@@ -1090,8 +1098,9 @@ export default function ResultPanel({
           )}
           <li className="flex gap-1.5">
             <span className="text-faint">·</span>
-            치안 참고(⑥)는 <b className="text-fg/80">자치구 단위</b> 경찰청 통계로 상권별 차이를 반영하지 않으며,{" "}
-            <b className="text-fg/80">창업기회점수에 반영되지 않습니다</b>. 지역에 대한 단정적 판단의 근거로 사용하지 마세요.
+            치안 참고(⑥)는 <b className="text-fg/80">자치구 단위</b> 경찰청 통계로 상권별 차이를 반영하지 않습니다.{" "}
+            <b className="text-fg/80">창업기회점수·매출 예측에는 들어가지 않고</b>, 종합점수에만 사용자가
+            토글을 켤 때 5% 가중됩니다. 지역에 대한 단정적 판단의 근거로 사용하지 마세요.
           </li>
           <li className="flex gap-1.5">
             <span className="text-faint">·</span>
@@ -1105,10 +1114,10 @@ export default function ResultPanel({
       </Section>
 
       {/* ── ⑨ 데이터 출처 ───────────────────────────────── */}
-      {result.meta.sources.length > 0 && (
+      {(result.meta.sources.length > 0 || (extraSources?.length ?? 0) > 0) && (
         <Section n={9} title="데이터 출처">
           <ul className="space-y-0.5">
-            {result.meta.sources.map((s) => (
+            {[...result.meta.sources, ...(extraSources ?? [])].map((s) => (
               <li key={s} className="text-[10.5px] leading-relaxed text-faint">
                 · {s}
               </li>

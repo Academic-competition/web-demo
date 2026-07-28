@@ -965,8 +965,16 @@ export async function metaViaFile(): Promise<MetaResult> {
 // 2차: 결정적 목업 (자치구명 시드) — sourceMode:"mock" 으로 정직하게 표시
 // 산식·가중치는 모델 정본(Commercial-AI- config/scoring_weights.yaml)과 동일하게 유지.
 // ------------------------------------------------------------------
-const SAFETY_WEIGHTS_NOTE =
-  "안전점수 = 범죄율(10만명당, 낮을수록↑) 50% + 검거율 25% + CCTV밀도 25% — " +
+/**
+ * 목업 경로 전용 문구·가중치.
+ *
+ * ⚠️ 실데이터 경로는 이 상수를 쓰지 않는다 — `meta/safety-scores.json` 이 자신이 사용한
+ *    가중치와 설명을 함께 기록하므로 그 값을 그대로 노출한다(산식이 갈라지는 것을 막는 장치).
+ *    산식 정본은 `Commercial-AI-/config/scoring_weights.yaml`, 산출은
+ *    `tools/build_safety_scores.py`. 가중치를 바꾸려면 그 두 곳과 아래를 함께 고칠 것.
+ */
+const SAFETY_WEIGHTS_NOTE_MOCK =
+  "안전점수 = 범죄율(10만명당, 낮을수록↑) 50% + 검거 비율 25% + CCTV밀도 25% — " +
   "자치구 간 백분위 가중합(0~100). 가중치는 서비스 정책값이며 통계적으로 검증된 사실이 아닙니다.";
 
 /** 자치구명 시드 결정적 난수 (lib/mockExtras 와 동일 방식 — 서버 전용 복제) */
@@ -1038,12 +1046,21 @@ export async function safetyScores(): Promise<SafetyScoresResult> {
     return {
       sourceMode: "file",
       year: String(raw.year ?? "unknown"),
+      cctvYear: raw.cctvYear ?? null,
       byGu,
-      weightsNote: SAFETY_WEIGHTS_NOTE,
+      // 산출 스크립트가 기록한 문구를 그대로 — 웹에서 산식을 다시 적지 않는다
+      weightsNote: String(raw.weightsNote ?? SAFETY_WEIGHTS_NOTE_MOCK),
+      sources: Array.isArray(raw.sources) ? raw.sources.map(String) : null,
       debug: {
         externalUrl: `file://model-exports/meta/safety-scores.json`,
         externalRequest: null,
-        externalResponse: { guCount: Object.keys(byGu).length, year: raw.year },
+        externalResponse: {
+          guCount: Object.keys(byGu).length,
+          year: raw.year,
+          cctvYear: raw.cctvYear ?? null,
+          weights: raw.weights ?? null,
+          sources: raw.sources ?? null,
+        },
         externalStatus: 200,
         externalDurationMs: Date.now() - started,
         error: null,
@@ -1065,8 +1082,10 @@ export async function safetyScores(): Promise<SafetyScoresResult> {
     return {
       sourceMode: "mock",
       year: "예시",
+      cctvYear: null,
       byGu: computeSafetyScores(rawByGu),
-      weightsNote: SAFETY_WEIGHTS_NOTE,
+      weightsNote: SAFETY_WEIGHTS_NOTE_MOCK,
+      sources: null,
       debug: {
         externalUrl: "mock://safety-scores (자치구명 시드 결정적 생성)",
         externalRequest: null,

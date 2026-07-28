@@ -58,34 +58,41 @@ Commercial-AI-/.venv/Scripts/python.exe sanggwon-web/tools/export_web_static.py 
 
 ---
 
-## 1. 🔴 안전점수가 실데이터가 아니다
+## 1. ✅ 안전점수 실데이터 전환 완료 (2026-07-28)
 
-**현상**: `/api/safety` 가 `sourceMode: "mock"`, `year: "예시"` 로 응답한다.
-자치구명을 시드로 한 결정적 가상값이며, **'치안 반영' 토글이 가상 수치로 순위를 바꾼다.**
-기본값이 미반영이고 배지가 붙으므로 정직성 위반은 아니지만, 토글이 의미 있는 정보를 주지 않는다.
+`/api/safety` 가 `sourceMode: "file"` 로 응답한다 — **범죄 2024 · CCTV 2025 실측**,
+25개 자치구 전부. '치안 반영' 토글이 실제 통계로 순위를 바꾼다
+(예: 강남구 상권 297위→317위 ▼20, 성북구 상권 904위→850위 ▲54).
 
-**원인**: `model-exports/meta/safety-scores.json` 이 없다.
-
-**해결**: 아래 CSV 를 구해 변환 스크립트를 돌린다.
+산출물: `model-exports/meta/safety-scores.json` (3.9KB) — 스크립트가 사용한 **가중치·출처를
+파일에 함께 기록**하고 웹이 그 문구를 그대로 노출한다(산식이 세 곳에서 갈라지는 것을 막는 장치).
 
 ```bash
-python tools/build_safety_scores.py --crime <5대범죄.csv> --pop <주민등록인구.csv> \
-       --cctv <CCTV.csv> --area <자치구면적.csv> --out model-exports/meta/safety-scores.json
+# 원본은 data/raw/ (모델 저장소, gitignore). 재생성 커맨드
+Commercial-AI-/.venv/Scripts/python.exe sanggwon-web/tools/build_safety_scores.py \
+  --crime ../seoul-startup-opportunity-recommender/data/raw/crime.csv \
+  --pop   ../seoul-startup-opportunity-recommender/data/raw/gu_population.csv \
+  --cctv  "../seoul-startup-opportunity-recommender/data/raw/서울시 자치구 (범죄예방 수사용) CCTV 설치현황('25.12.31 기준).xlsx" \
+  --out   model-exports/meta/safety-scores.json
 ```
 
-| 필요 데이터 | 출처 | 단위 |
+| 사용 데이터 | 출처 | 기준 |
 |---|---|---|
-| 5대 범죄 발생·검거 | 서울 열린데이터광장 / 경찰청 | 자치구 × 연 |
-| 주민등록인구 | 서울 열린데이터광장 | 자치구 × 연 (10만명당 환산용) |
-| CCTV 설치 현황 | 서울시 | 자치구 |
-| 자치구 면적 | — | 자치구 (밀도 환산용) |
+| 5대 범죄 발생·검거 (자치구별) | 서울 열린데이터광장 / 경찰청 | 2024 |
+| 주민등록인구 | 서울 열린데이터광장 | 자치구 (10만명당 환산) |
+| 범죄예방 CCTV 설치현황 (xlsx) | 서울시 | 2025 |
+| 자치구 면적 | `build_safety_scores.py` 내장 상수 (`--area` 로 대체 가능) | 2024 |
 
-산식은 모델 정본 `Commercial-AI-/config/scoring_weights.yaml` 과 동일하게 유지할 것:
-**범죄율(10만명당, 낮을수록↑) 50% + 검거율 25% + CCTV밀도 25%**.
-자동 수집은 구현되어 있지 않다 (`Commercial-AI-/scripts/collect_data.py:10`).
+**주의**
+- 검거 수치는 발생을 초과할 수 있다 (종로구 1.17). 다른 기간 사건 검거·검거 인원 집계 때문이며
+  원본 그대로 백분위에만 쓴다 — **'검거율'로 화면에 직접 표시하지 말 것**
+- 자동 수집은 미구현 (`Commercial-AI-/scripts/collect_data.py:10`) — CSV 수동 다운로드
+- 남은 것: **서빙 파이프라인 쪽 `detail.safety` 는 여전히 `null`** 이다. 정본 설계
+  (`attach_safety()`)로 서빙 테이블에 조인하려면 `crime_gu.csv`/`cctv_gu.csv` 스키마로
+  변환이 필요하다. 현재 웹은 `/api/safety` → 화면 계층 매칭으로 동작하며 이것으로 충분하다
 
 **관련 파일**: `tools/build_safety_scores.py`, `lib/normalize.ts` 의 `safetyScores()`,
-`app/api/safety/route.ts`
+`app/api/safety/route.ts`, `app/page.tsx` 의 `safetyFromScores`/`extraSources`
 
 ---
 
