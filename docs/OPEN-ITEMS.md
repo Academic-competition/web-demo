@@ -1,11 +1,15 @@
 # 미해결 과제 · 인계 문서
 
 > 다른 세션/사람이 이어받을 수 있도록 **남은 문제와 해결 방법**을 정리한 문서.
-> 최종 갱신: 2026-07-29
+> 최종 갱신: 2026-07-29 (세션 종료 인계)
 >
-> **지금 이어서 할 일**: §2 + §3 재학습 (매출 과대 추정 · ML 베이스라인 열세). §1 치안과
-> §6 배후지는 웹 표시까지 실데이터 전환이 끝났고, 남은 것은 **모델 파이프라인 편입**이다 —
-> 팀원 소유 저장소(`Commercial-AI-`) 수정이라 합의가 필요하다.
+> **지금 이어서 할 일**: 모델 쪽 데이터 편입 — 아래 §9 의 **2트랙** 을 먼저 읽을 것.
+> 웹은 표시까지 실데이터 전환이 끝났다(§1 치안 · §6 배후지 · 계보 인스펙터). 남은 것은
+> 파이프라인/학습 편입이며 팀원 소유 저장소(`Commercial-AI-`) 작업이라 합의가 필요하다.
+>
+> ⚠️ **이 PC 에서는 파이프라인을 돌릴 수 없다** — `Commercial-AI-/.venv` 도 `data/` 도 없다.
+> README 의 데이터 재생성 커맨드는 이 머신에서 실패한다 (§9 참조).
+>
 > 작업 전 [§0 자주 하는 오해](#자주-하는-오해-2026-07-28-정정)를 먼저 읽을 것 (치안·부동산이
 > 학습 피처에 포함돼 있다는 사실을 놓치면 문서·UI 에 틀린 서술을 또 쓰게 된다).
 
@@ -273,6 +277,10 @@ CSV 5종을 받아 `tools/build_hinterland.py` → `model-exports/meta/hinterlan
 - **업종 랭킹이 없는 상권 5개** — 모든 업종이 표본 부족인 상권(`종로5가역 4번`,
   `배꽃어린이공원`, `연희지하차도`, `문래역 3번`, `마천공원`). 빈 목록 + 사유 안내로
   처리되며 업종 직접 선택 경로가 열린다. 데이터가 없어 구조적으로 해결 불가
+- **리포트 블록을 추가하면 `lib/provenance.ts` 의 계보 표에도 행을 추가할 것.** 인스펙터의
+  `ML`/`데이터 계보` 두 줄이 "이 서비스는 CSV 조회 아니냐"에 대한 답이라, 새 블록이 계보에
+  빠지면 그 답이 부정확해진다. 분류는 응답 필드에서 파생하고 하드코딩하지 말 것
+  (CLAUDE.md 에도 규칙으로 적어 뒀다)
 - **`lib/mockExtras.ts`** — `mockHinterland()` 는 §6 전환으로 삭제됐다. 남은 `mockSafety()` 는
   §1 전환 후 호출되지 않지만 폴백으로 유지한다. 파일 상단 주석에 **소득분위·가구수·임대시세를
   왜 뺐는지** 히스토리를 남겼다 (같은 항목을 다시 목업으로 채우지 않도록)
@@ -295,4 +303,57 @@ CSV 5종을 받아 `tools/build_hinterland.py` → `model-exports/meta/hinterlan
 - [ ] `MODEL_SERVER_URL` 은 **비워 둘 것** (Vercel 에 모델 서버가 없다. 설정하면 매 요청마다
       실패할 fetch 를 낭비한다)
 - [ ] `model-exports/` 가 커밋되어 있고 `next.config.ts` 의 `outputFileTracingIncludes` 에
-      5개 라우트(`analyze`/`heatmap`/`meta`/`top-industries`/`safety`)가 모두 있는지 확인
+      **6개 라우트**(`analyze`/`heatmap`/`meta`/`top-industries`/`safety`/`hinterland`)가
+      모두 있는지 확인 — 누락하면 로컬은 되고 **배포에서만 502**
+- [x] **GitHub 자동배포 연결됨 (2026-07-28)** — `main` 푸시 후 ~1분이면 새 배포가 뜨고
+      프로덕션 alias 가 자동 전환된다. `npx vercel --prod` 수동 배포는 이제 불필요.
+      확인: `npx vercel inspect web-demo-kappa-two.vercel.app` 의 `created` 가 방금인지 본다
+
+---
+
+## 9. 🔴 모델 쪽 데이터 편입 — **2트랙** (다음 작업)
+
+받아둔 데이터가 **웹 표시에는 다 들어갔지만 모델에는 아직 안 들어갔다.** 성질이 다른 두 갈래다.
+
+### ⚠️ 먼저: 이 개발 PC 에서는 파이프라인을 돌릴 수 없다
+
+| 필요한 것 | 이 PC 상태 |
+|---|---|
+| `Commercial-AI-/.venv` | **없음** |
+| `Commercial-AI-/data/raw/*` (sales 등 원본) | **없음** (`data/` 폴더 자체가 없다) |
+| `data/processed/serving_table.parquet` | 없음 |
+
+즉 README 의 재생성 커맨드(`Commercial-AI-/.venv/Scripts/python.exe scripts/...`)는 **여기서
+실패한다.** 현재 `model-exports/` 는 다른 머신에서 만들어 커밋된 것을 그대로 쓰는 상태다.
+`seoul-startup-opportunity-recommender/.venv` (Python 3.14) 는 있고 배후지·안전점수 산출
+스크립트는 그걸로 돌렸다 — 그 둘은 원본 CSV 만 있으면 되기 때문이다.
+
+**선행 작업**: 모델 파이프라인을 돌릴 머신에서 `uv` 로 `Commercial-AI-/.venv` 생성 +
+`scripts/collect_data.py` 로 원본 수집 (`SEOUL_API_KEY` 필요). 또는 다른 세션/머신에 위임.
+
+### 트랙 1 — **재학습 없이** 되는 것 (치안·부동산 값 채우기)
+
+`sf_*`/`re_*` 6개는 **이미 학습된 피처**인데 서빙 값이 NaN 이다(§0 '자주 하는 오해').
+값만 채우면 학습된 모델이 그 피처를 실제로 쓴다. 재학습·팀원 코드 수정 없이 가능하다.
+
+1. 우리가 받은 원본을 정본이 기대하는 스키마로 변환해 `Commercial-AI-/data/raw/external/` 에 둔다
+   - `crime_gu.csv` ← `자치구, 연도, 범죄_발생_건수, 범죄_검거_건수, 인구`
+     (재료: `crime.csv` 2024 + `gu_population.csv`. `src/features/external.py:52` 가 이 컬럼을 요구)
+   - `cctv_gu.csv` ← `자치구, 연도, cctv_대수, 자치구_면적_km2`
+     (재료: CCTV xlsx 2025 + `tools/build_safety_scores.py` 의 `GU_AREA_KM2`)
+   - `rone_rent.csv` (임대시세) 는 R-ONE 미보유 → 생략하면 `re_*` 는 계속 NaN
+2. `build_features.py` → (외부 데이터가 있으면 `prepare_feature_table.py` 불필요) →
+   `build_serving_table.py` → `tools/export_web_static.py` 재실행
+3. 효과: 예측값이 약 1.9% 변동(스크립트 주석의 측정치), `overall_score` 의 safety 5% 가 실제로
+   반영되고 `detail.safety` 가 채워진다 → 웹의 `/api/safety` 경로와 **이중 계산이 되므로**
+   그때 `page.tsx` 의 `safetyFromScores` 우선순위를 다시 볼 것(현재는 서빙 우선이라 자동 정리됨)
+
+### 트랙 2 — **재학습이 필요한 것**
+
+- **새 피처 편입**: 상주인구·직장인구(+선택: 아파트·집객시설)는 학습본에 없던 컬럼이라 재학습
+  해야 한다. `config/data_sources.yaml:62,71` 의 `verified: false` → 검증 후 `true` + 수집 추가.
+  판단표는 §6 참조. **소비지출은 제외** (누출 검증 불가 · 시점 불일치)
+- **타깃 분모 수정**: §2 의 5단계. 프랜차이즈 제외 점포수 → `유사_업종_점포_수`
+- 두 개를 **한 번의 재학습으로 묶는 것**이 효율적이며, §3(베이스라인 열세) 개선 기대치도 여기 있다
+- `models/sales_model.pkl` **백업 먼저**. `scripts/train_model.py` 는 실데이터 189,411행
+  학습본을 덮어쓴다
