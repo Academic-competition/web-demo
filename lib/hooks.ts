@@ -13,9 +13,24 @@ import type {
   HinterlandResult,
   MetaResult,
   SafetyScoresResult,
+  SourceMode,
   TopIndustriesResult,
 } from "./contracts";
 import { inspect } from "./inspector";
+import { PROVENANCE_LABEL, provenanceOf, provenanceSummary } from "./provenance";
+
+/**
+ * 외부 데이터(치안·배후지)의 최근 sourceMode.
+ *
+ * 계보 표는 analyze 응답만으로는 완성되지 않는다(⑥⑦ 은 별도 API). 훅끼리 상태를 주고받는
+ * 대신, 각 훅이 응답을 받을 때 여기에 최근 값을 남기고 analyze 가 그걸 읽는다.
+ * 순서가 어긋나면(치안이 아직 안 온 상태) 해당 행이 빠질 뿐이라 거짓을 만들지 않는다.
+ */
+const lastExternal: {
+  safety: SourceMode | null;
+  hinterland: SourceMode | null;
+  spendingAsOf: string | null;
+} = { safety: null, hinterland: null, spendingAsOf: null };
 
 /** 배후지 실측 — 리포트 ⑦ (상권이 정해지면 로드) */
 export function useHinterland(sangwonCode: number | null) {
@@ -26,6 +41,8 @@ export function useHinterland(sangwonCode: number | null) {
       const res = await fetch(`/api/hinterland?sangwonCode=${sangwonCode}`);
       if (!res.ok) throw new Error("배후지 정보 로드 실패");
       const data: HinterlandResult = await res.json();
+      lastExternal.hinterland = data.sourceMode;
+      lastExternal.spendingAsOf = data.hinterland?.spending?.asOf ?? null;
       const blocks = data.hinterland
         ? Object.entries(data.hinterland).filter(([, v]) => v).length
         : 0;
@@ -51,6 +68,7 @@ export function useSafetyScores() {
       const res = await fetch("/api/safety");
       if (!res.ok) throw new Error("안전점수 로드 실패");
       const data: SafetyScoresResult = await res.json();
+      lastExternal.safety = data.sourceMode;
       inspect(
         data.sourceMode === "mock" ? "err" : "file",
         `GET /api/safety — 자치구 ${Object.keys(data.byGu).length}개 안전점수 (${data.sourceMode}${data.sourceMode === "mock" ? " · 예시 데이터" : ` · ${data.year}`})`,
@@ -130,6 +148,34 @@ export function useAnalyze() {
         },
         totalMs
       );
+
+      // ---- 데이터 계보 — 이 리포트의 어느 숫자가 ML 예측이고 어디가 실측인지 ----
+      if (data.status === "ok") {
+        const rows = provenanceOf(data, {
+          safety: lastExternal.safety,
+          hinterland: lastExternal.hinterland,
+          spendingAsOf: lastExternal.spendingAsOf,
+          hasRanking: true,
+        });
+        const ml = rows.filter((r) => r.kind === "ml");
+        if (ml.length > 0) {
+          inspect(
+            "ml",
+            `학습된 모델의 예측이 쓰인 곳 ${ml.length}개 — ${ml.map((r) => r.block).join(", ")}`,
+            ml.map((r) => ({ 블록: r.block, 산출: r.how, 근거필드: r.from }))
+          );
+        }
+        inspect(
+          "res",
+          `데이터 계보 — ${provenanceSummary(rows)}`,
+          rows.map((r) => ({
+            블록: r.block,
+            분류: PROVENANCE_LABEL[r.kind],
+            산출: r.how,
+            근거필드: r.from,
+          }))
+        );
+      }
       return data;
     },
   });

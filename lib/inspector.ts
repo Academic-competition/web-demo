@@ -12,6 +12,7 @@ export type InspectorKind =
   | "geo" // 좌표→상권 매핑 계산
   | "req" // 내부 API 요청 (브라우저 → Next 서버)
   | "model" // 외부 모델 서버 호출 (Next 서버 → FastAPI, debug 트레이스)
+  | "ml" // 학습된 모델의 예측값이 리포트에 쓰인 지점 (계보)
   | "res" // 정규화된 최종 응답
   | "file" // 사전계산 파일 로드 (히트맵)
   | "err"; // 오류/폴백

@@ -22,6 +22,9 @@
 - 모든 응답에 `sourceMode`(live/file/mock) 유지 — 목업이면 UI 배지로 정직하게 표시
 - AI 인스펙터 콘솔(`lib/inspector.ts` + `components/InspectorConsole.tsx`):
   새 데이터 흐름을 추가하면 `inspect()` 이벤트도 같이 심을 것 (데모 투명성이 셀링 포인트)
+- 리포트에 **새 블록을 추가하면 `lib/provenance.ts` 의 계보 표에도 행을 추가**할 것.
+  분류(ML/통계/실측/규칙/예시)는 응답 필드에서 파생해야 하며 하드코딩 금지 —
+  인스펙터의 'ML/계보' 두 줄이 "조회 서비스 아니냐"에 대한 답이다
 
 ## 스타일
 

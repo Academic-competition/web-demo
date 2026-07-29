@@ -14,14 +14,15 @@ import {
   type InspectorKind,
 } from "@/lib/inspector";
 
-const KIND_STYLE: Record<InspectorKind, { label: string; color: string }> = {
-  map: { label: "MAP", color: "#6ea8fe" },
-  geo: { label: "GEO", color: "#57cfc0" },
-  req: { label: "REQ", color: "#e3b65a" },
-  model: { label: "MODEL", color: "#b78cf7" },
-  res: { label: "RES", color: "#3ddc97" },
-  file: { label: "FILE", color: "#8a95b0" },
-  err: { label: "ERR", color: "#f0655d" },
+const KIND_STYLE: Record<InspectorKind, { label: string; color: string; hint?: string }> = {
+  map: { label: "MAP", color: "#6ea8fe", hint: "지도 상호작용" },
+  geo: { label: "GEO", color: "#57cfc0", hint: "좌표→상권 매핑" },
+  req: { label: "REQ", color: "#e3b65a", hint: "내부 API 요청" },
+  model: { label: "MODEL", color: "#b78cf7", hint: "모델 서버 외부 호출" },
+  ml: { label: "ML", color: "#ff9f45", hint: "학습된 모델의 예측이 쓰인 지점" },
+  res: { label: "RES", color: "#3ddc97", hint: "정규화 응답" },
+  file: { label: "FILE", color: "#8a95b0", hint: "사전계산 실데이터" },
+  err: { label: "ERR", color: "#f0655d", hint: "오류·폴백" },
 };
 
 function Row({ entry }: { entry: InspectorEntry }) {
@@ -104,7 +105,7 @@ export default function InspectorConsole() {
           AI 인스펙터
         </span>
         <span className="text-[10px] text-faint">
-          지도 → 상권 매핑 → 모델 서버 요청/응답 실시간 추적
+          지도 → 상권 매핑 → 요청/응답 → <b className="text-[#ff9f45]">숫자별 출처 계보</b>
         </span>
         <div className="ml-auto flex items-center gap-1">
           <button
@@ -134,15 +135,21 @@ export default function InspectorConsole() {
         )}
       </div>
 
-      {/* 범례 */}
+      {/* 범례 — 마우스를 올리면 각 종류가 무엇인지 표시 */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-line/60 px-3 py-1.5">
         {Object.entries(KIND_STYLE).map(([k, s]) => (
-          <span key={k} className="flex items-center gap-1 text-[9px] text-faint">
+          <span
+            key={k}
+            className="flex items-center gap-1 text-[9px] text-faint"
+            title={s.hint}
+          >
             <i className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: s.color }} />
             {s.label}
           </span>
         ))}
-        <span className="ml-auto text-[9px] text-faint">항목 클릭 시 JSON 펼침</span>
+        <span className="ml-auto text-[9px] text-faint">
+          <b className="text-[#ff9f45]">ML</b>·계보 항목을 클릭하면 블록별 산출 방식이 펼쳐집니다
+        </span>
       </div>
     </div>
   );
