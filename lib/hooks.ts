@@ -10,11 +10,37 @@ import type {
   AnalyzeRequest,
   AnalyzeResult,
   HeatmapResult,
+  HinterlandResult,
   MetaResult,
   SafetyScoresResult,
   TopIndustriesResult,
 } from "./contracts";
 import { inspect } from "./inspector";
+
+/** 배후지 실측 — 리포트 ⑦ (상권이 정해지면 로드) */
+export function useHinterland(sangwonCode: number | null) {
+  return useQuery<HinterlandResult>({
+    queryKey: ["hinterland", sangwonCode],
+    queryFn: async () => {
+      const started = Date.now();
+      const res = await fetch(`/api/hinterland?sangwonCode=${sangwonCode}`);
+      if (!res.ok) throw new Error("배후지 정보 로드 실패");
+      const data: HinterlandResult = await res.json();
+      const blocks = data.hinterland
+        ? Object.entries(data.hinterland).filter(([, v]) => v).length
+        : 0;
+      inspect(
+        data.sourceMode === "mock" ? "err" : "file",
+        `GET /api/hinterland — 배후지 ${blocks}개 블록 (${data.sourceMode})`,
+        data.debug ?? { sourceMode: data.sourceMode },
+        Date.now() - started
+      );
+      return data;
+    },
+    enabled: sangwonCode != null,
+    staleTime: 5 * 60 * 1000,
+  });
+}
 
 /** 자치구 안전점수 — '치안 반영' 토글용 (작고 정적이라 세션 내 1회 로드) */
 export function useSafetyScores() {

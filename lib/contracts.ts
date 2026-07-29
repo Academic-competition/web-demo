@@ -232,6 +232,75 @@ export const SafetyScoresResult = z.object({
 });
 export type SafetyScoresResult = z.infer<typeof SafetyScoresResult>;
 
+/**
+ * 배후지 실측 — 리포트 ⑦. `meta/hinterland.json.gz` (tools/build_hinterland.py 산출).
+ *
+ * ⚠️ **항목별 기준 분기(asOf)가 다르다.** 상주/직장/아파트/집객시설은 최신(2026Q1)이지만
+ *    소비지출은 원본이 2023Q4 이후 미공개다. 한 분기로 강제하면 최신 4종을 끌어내려야 해서
+ *    항목별 as-of 를 쓴다 — **UI 는 각 블록에 asOf 를 반드시 표기할 것**(혼합 빈티지를 숨기지 않는다).
+ */
+export const HinterlandDetail = z.object({
+  resident: z
+    .object({
+      total: z.number().nullable(),
+      byGender: z.array(RatioSlice).nullable(),
+      byAge: z.array(RatioSlice).nullable(),
+      asOf: z.string(),
+    })
+    .nullable()
+    .optional(),
+  worker: z
+    .object({
+      total: z.number().nullable(),
+      byAge: z.array(RatioSlice).nullable(),
+      asOf: z.string(),
+    })
+    .nullable()
+    .optional(),
+  apartment: z
+    .object({
+      complexes: z.number().nullable(),
+      /** 아파트 세대수 합 — 전체 가구 수가 아니다 (라벨 주의) */
+      households: z.number().nullable(),
+      avgPriceKRW: z.number().nullable(),
+      avgAreaM2: z.number().nullable(),
+      asOf: z.string(),
+    })
+    .nullable()
+    .optional(),
+  facility: z
+    .object({
+      total: z.number().nullable(),
+      items: z.array(z.object({ label: z.string(), count: z.number() })).nullable(),
+      asOf: z.string(),
+    })
+    .nullable()
+    .optional(),
+  /** 배후지 소비지출 — 표시 전용. 매출과 겹치는 분기가 없어 ML 누출 검증 불가 (ML 제외) */
+  spending: z
+    .object({
+      totalKRW: z.number().nullable(),
+      byCategory: z.array(RatioSlice).nullable(),
+      asOf: z.string(),
+    })
+    .nullable()
+    .optional(),
+});
+export type HinterlandDetail = z.infer<typeof HinterlandDetail>;
+
+/** 데이터셋에 없어서 리포트에서 뺀 항목 — 왜 없는지 화면에 밝힌다 */
+export const UnavailableItem = z.object({ item: z.string(), reason: z.string() });
+export type UnavailableItem = z.infer<typeof UnavailableItem>;
+
+export const HinterlandResult = z.object({
+  sourceMode: SourceMode,
+  hinterland: HinterlandDetail.nullable(),
+  unavailable: z.array(UnavailableItem),
+  sources: z.array(z.string()),
+  debug: DebugTrace.nullable().optional(),
+});
+export type HinterlandResult = z.infer<typeof HinterlandResult>;
+
 export const AnalyzeDetail = z.object({
   sales: SalesDetail.nullable(),
   store: StoreDetail.nullable(),

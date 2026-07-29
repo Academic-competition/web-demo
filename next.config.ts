@@ -9,6 +9,7 @@ const nextConfig: NextConfig = {
     "/api/meta": ["./model-exports/**/*"],
     "/api/top-industries": ["./model-exports/**/*"],
     "/api/safety": ["./model-exports/**/*"],
+    "/api/hinterland": ["./model-exports/**/*"],
   },
 };
 

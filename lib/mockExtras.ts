@@ -1,32 +1,29 @@
 /**
- * mockExtras — 배후지 분석 '예시 데이터' 생성 (실데이터 미보유 항목)
+ * mockExtras — 실데이터 미보유 구간의 '예시 데이터' 폴백
  *
- * golmok(서울시 상권분석서비스)의 배후지 지표(주거·직장인구, 가구, 소득, 소비,
- * 임대시세, 집객시설)는 별도 데이터셋(상주인구·직장인구·소득소비 등)이 필요해
- * 현재 번들에 없다. 데모 완성도를 위해 UI는 먼저 만들되, 값은 상권 코드 기반
- * 결정적(seeded) 생성임을 명확히 표기한다 — UI에 "예시 데이터" 배지 필수.
+ * 값은 상권/자치구 시드 결정적(seeded) 생성이며 **UI 에 "예시 데이터" 배지 필수**.
  *
- * 실데이터 연동 시: 서빙 detail에 hinterland 필드를 추가하고 이 파일을 제거한다.
+ * ## 히스토리 — 배후지(⑦) 목업은 제거됨 (2026-07-29)
+ *
+ * golmok 벤치마크 때 ⑦ 배후지 8개 항목(주거·직장인구, 가구수, 아파트 비율, 소득분위,
+ * 임대시세, 소비트렌드, 집객시설)을 `mockHinterland()` 로 채워 UI 를 먼저 만들었고,
+ * 실데이터를 받아 `meta/hinterland.json.gz` + `/api/hinterland` 로 교체하면서 지웠다.
+ *
+ * 그 과정에서 **원본 데이터셋에 없어 항목 자체를 뺀 것들** (없는 값을 목업으로 채우지 않기로 함):
+ *
+ * - **소득분위**: `소득소비-상권배후지`(OA-15571) 에는 소득이 아니라 **지출 금액만** 있다
+ *   (`지출_총금액` + 카테고리 9종). golmok 의 "소득수준 N분위" 는 다른 소스이며, 소비지출로
+ *   소득을 역산하면 근거 없는 수치가 된다. 추후 소득 컬럼이 있는 데이터셋(예: `소득소비-상권`
+ *   OA-21278)을 확인해 붙일 수 있다
+ * - **총 가구 수**: `아파트-상권`(OA-15566) 은 아파트 세대수만 제공한다. 그래서 ⑦ 은
+ *   "아파트 단지/세대" 로만 표기하고 '가구 수' 라는 라벨을 쓰지 않는다
+ * - **임대시세**: 한국부동산원 R-ONE 별도 데이터. 정본 파이프라인(`re_*`)은 있으나 값 미보유
+ *
+ * 또 소비지출은 원본이 **2023Q4 이후 미공개**여서 다른 블록(2026Q1)과 기준 분기가 다르다.
+ * 매출 데이터(2025Q1~)와 겹치는 분기가 0개라 타깃 누출 검증이 불가능해 **ML 에는 쓰지 않는다**.
+ *
+ * 남은 목업은 치안(`mockSafety`) 폴백 하나이며, 실데이터가 있으면 호출되지 않는다.
  */
-
-export type HinterlandMock = {
-  /** 주거인구 (명) */
-  residents: number;
-  /** 직장인구 (명) */
-  workers: number;
-  /** 가구 수 */
-  households: number;
-  /** 아파트 가구 비율 (0~1) */
-  aptRatio: number;
-  /** 소득 분위 (1~10) */
-  incomeDecile: number;
-  /** 1층 환산 임대료 (3.3㎡당 월, 원) */
-  rentPer33m2: number;
-  /** 소비 카테고리 비중 (합 1) */
-  consumption: { label: string; ratio: number }[];
-  /** 집객시설 수 */
-  facilities: { label: string; count: number }[];
-};
 
 /** mulberry32 — 상권 코드 시드 결정적 난수 (같은 상권 = 항상 같은 예시값) */
 function mulberry32(seed: number) {
@@ -40,40 +37,7 @@ function mulberry32(seed: number) {
   };
 }
 
-const CONSUMPTION_LABELS = ["식료품·외식", "생활용품", "의료·건강", "여가·문화", "교육", "기타"];
-const FACILITY_LABELS = ["학교", "병·의원", "교통시설", "유통점", "금융기관"];
 
-export function mockHinterland(sangwonCode: number): HinterlandMock {
-  const rand = mulberry32(sangwonCode);
-
-  const residents = Math.round(6000 + rand() * 38000);
-  const workers = Math.round(1500 + rand() * 55000);
-  const households = Math.round(residents / (2.0 + rand() * 0.6));
-  const aptRatio = Math.round((0.2 + rand() * 0.6) * 100) / 100;
-  const incomeDecile = 4 + Math.floor(rand() * 6); // 4~9분위
-  const rentPer33m2 = Math.round((90_000 + rand() * 160_000) / 1000) * 1000;
-
-  // 소비 비중: 식료품·외식이 가장 크게, 나머지 랜덤 후 정규화
-  const weights = [3.5 + rand() * 2, 1 + rand(), 0.6 + rand(), 0.6 + rand(), 0.4 + rand(), 0.5 + rand()];
-  const wsum = weights.reduce((a, b) => a + b, 0);
-  const consumption = CONSUMPTION_LABELS.map((label, i) => ({
-    label,
-    ratio: Math.round((weights[i] / wsum) * 1000) / 1000,
-  }));
-
-  const facilities = FACILITY_LABELS.map((label) => ({
-    label,
-    count: Math.round(1 + rand() * 14),
-  }));
-
-  return { residents, workers, households, aptRatio, incomeDecile, rentPer33m2, consumption, facilities };
-}
-
-/** 소득 분위 → 대략적 월소득 구간 문구 (데모 안내용) */
-export function incomeDecileRange(decile: number): string {
-  const base = 180 + (decile - 1) * 45; // 만원 단위 대략치
-  return `월 ${base.toLocaleString()}~${(base + 45).toLocaleString()}만원대`;
-}
 
 // ------------------------------------------------------------------
 // 치안 참고 '예시 데이터' — crime.csv 미보유 시 폴백 (SafetyDetail과 동일 형태)

@@ -28,6 +28,7 @@ import type {
   AnalyzeRequest,
   AnalyzeResult,
   HeatmapResult,
+  HinterlandResult,
   MetaResult,
   SafetyScoresResult,
   TopIndustriesResult,
@@ -1033,6 +1034,121 @@ function computeSafetyScores(
     }
   }
   return out;
+}
+
+// ------------------------------------------------------------------
+// 배후지 실측 — 리포트 ⑦ (meta/hinterland.json.gz, tools/build_hinterland.py 산출)
+//
+// 파일이 없으면 sourceMode:"mock" 으로 응답하고 UI 가 예시 데이터 배지를 붙인다
+// (safety-scores 와 같은 패턴). 상권 수가 많아 한 번 읽고 모듈 메모리에 캐시한다.
+// ------------------------------------------------------------------
+let _hinterlandCache: {
+  asOf: Record<string, string>;
+  sources: string[];
+  unavailable: { item: string; reason: string }[];
+  bySangwon: Record<string, any>;
+} | null = null;
+
+async function loadHinterland() {
+  if (_hinterlandCache) return _hinterlandCache;
+  const file = path.join(EXPORTS_DIR, "meta", "hinterland.json.gz");
+  const buf = await fs.readFile(file);
+  _hinterlandCache = JSON.parse(zlib.gunzipSync(buf).toString("utf-8"));
+  return _hinterlandCache!;
+}
+
+export async function hinterland(sangwonCode: number): Promise<HinterlandResult> {
+  const started = Date.now();
+  try {
+    const table = await loadHinterland();
+    const raw = table.bySangwon[String(sangwonCode)] ?? null;
+    const slices = (arr: any) =>
+      Array.isArray(arr) && arr.length
+        ? arr.map((s: any) => ({ label: String(s.label), ratio: Number(s.ratio ?? 0) }))
+        : null;
+    const n = (v: any) => (v != null && Number.isFinite(Number(v)) ? Number(v) : null);
+
+    return {
+      sourceMode: "file",
+      hinterland: raw
+        ? {
+            resident: raw.resident
+              ? {
+                  total: n(raw.resident.total),
+                  byGender: slices(raw.resident.byGender),
+                  byAge: slices(raw.resident.byAge),
+                  asOf: String(raw.resident.asOf ?? "unknown"),
+                }
+              : null,
+            worker: raw.worker
+              ? {
+                  total: n(raw.worker.total),
+                  byAge: slices(raw.worker.byAge),
+                  asOf: String(raw.worker.asOf ?? "unknown"),
+                }
+              : null,
+            apartment: raw.apartment
+              ? {
+                  complexes: n(raw.apartment.complexes),
+                  households: n(raw.apartment.households),
+                  avgPriceKRW: n(raw.apartment.avgPriceKRW),
+                  avgAreaM2: n(raw.apartment.avgAreaM2),
+                  asOf: String(raw.apartment.asOf ?? "unknown"),
+                }
+              : null,
+            facility: raw.facility
+              ? {
+                  total: n(raw.facility.total),
+                  items: Array.isArray(raw.facility.items)
+                    ? raw.facility.items.map((x: any) => ({
+                        label: String(x.label),
+                        count: Number(x.count ?? 0),
+                      }))
+                    : null,
+                  asOf: String(raw.facility.asOf ?? "unknown"),
+                }
+              : null,
+            spending: raw.spending
+              ? {
+                  totalKRW: n(raw.spending.totalKRW),
+                  byCategory: slices(raw.spending.byCategory),
+                  asOf: String(raw.spending.asOf ?? "unknown"),
+                }
+              : null,
+          }
+        : null,
+      unavailable: table.unavailable ?? [],
+      sources: table.sources ?? [],
+      debug: {
+        externalUrl: `file://model-exports/meta/hinterland.json.gz#${sangwonCode}`,
+        externalRequest: { sangwonCode },
+        externalResponse: raw
+          ? { asOf: table.asOf, blocks: Object.keys(raw) }
+          : { note: "이 상권은 배후지 데이터가 없습니다" },
+        externalStatus: 200,
+        externalDurationMs: Date.now() - started,
+        error: null,
+      },
+    };
+  } catch {
+    // 산출물 미보유 → 목업 폴백 (UI 가 예시 데이터 배지)
+    return {
+      sourceMode: "mock",
+      hinterland: null,
+      unavailable: [],
+      sources: [],
+      debug: {
+        externalUrl: "mock://hinterland",
+        externalRequest: { sangwonCode },
+        externalResponse: {
+          note: "hinterland.json.gz 없음 — tools/build_hinterland.py 로 생성 가능",
+        },
+        externalStatus: null,
+        externalDurationMs: Date.now() - started,
+        error: "배후지 산출물 없음 → 예시 데이터 폴백",
+      },
+    };
+  }
 }
 
 export async function safetyScores(): Promise<SafetyScoresResult> {

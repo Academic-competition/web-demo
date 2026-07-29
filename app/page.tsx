@@ -22,6 +22,7 @@ import { nearestSangwon, MAX_SNAP_METERS } from "@/lib/geo";
 import {
   useAnalyze,
   useHeatmap,
+  useHinterland,
   useMeta,
   useSafetyScores,
   useTopIndustries,
@@ -57,6 +58,8 @@ export default function Home() {
   // 상권 업종 랭킹 — 위치 먼저 모드의 중간 단계이자, 리포트의 '상권 내 기회 순위' 소스.
   // 업종 먼저 모드에서도 상권이 정해지면 순위 맥락을 위해 로드한다 (파일 캐시라 가벼움).
   const topIndustries = useTopIndustries(selectedCode);
+  // 배후지 실측 — 리포트 ⑦ (분석이 열렸을 때만 로드)
+  const hinterlandQ = useHinterland(analyze.data ? analyze.data.sangwon.code : null);
 
   // golmok '나의 등수' 패턴: 선택 업종이 이 상권의 업종 중 기회점수 몇 위인지
   const rankingContext = useMemo(() => {
@@ -73,11 +76,13 @@ export default function Home() {
     };
   }, [topIndustries.data, analyze.data]);
 
-  /** 치안 실데이터를 쓸 때만 그 출처를 리포트 ⑨ 출처 목록에 덧붙인다 (목업이면 붙이지 않음) */
-  const extraSources = useMemo(
-    () => (safety.data?.sourceMode === "file" ? safety.data.sources ?? [] : []),
-    [safety.data]
-  );
+  /** 실측을 쓴 경우에만 그 출처를 리포트 ⑨ 목록에 덧붙인다 (목업이면 붙이지 않음) */
+  const extraSources = useMemo(() => {
+    const out: string[] = [];
+    if (safety.data?.sourceMode === "file") out.push(...(safety.data.sources ?? []));
+    if (hinterlandQ.data?.sourceMode === "file") out.push(...(hinterlandQ.data.sources ?? []));
+    return [...new Set(out)];
+  }, [safety.data, hinterlandQ.data]);
 
   // ---- 종합점수 (상권 간, 이 업종) — 치안 미반영/반영 두 버전을 미리 계산 ----
   // base = 매출 백분위 60% + 생존율(셀 간 백분위) 40%  ← 가중치는 화면에 명시되는 정책값
@@ -480,6 +485,7 @@ export default function Home() {
               rankingContext={rankingContext}
               scoreComparison={scoreComparison}
               safetyFromScores={safetyFromScores}
+              hinterland={hinterlandQ.data ?? null}
               extraSources={extraSources}
               onChangeIndustry={() => {
                 if (mode === "location") {

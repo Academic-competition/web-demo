@@ -9,9 +9,15 @@
  *
  * 상태: idle / loading(단계형) / insufficient_data(UC-004) / error(UC-006) / ok
  */
-import type { AnalyzeResult, Grade, RatioSlice, SafetyDetail } from "@/lib/contracts";
+import type {
+  AnalyzeResult,
+  Grade,
+  HinterlandResult,
+  RatioSlice,
+  SafetyDetail,
+} from "@/lib/contracts";
 import { formatKRW, formatKRWCompact, formatPeople, pctChange } from "@/lib/format";
-import { incomeDecileRange, mockHinterland, mockSafety } from "@/lib/mockExtras";
+import { mockSafety } from "@/lib/mockExtras";
 import SurvivalGauge from "./SurvivalGauge";
 import DemographicsChart from "./DemographicsChart";
 import {
@@ -347,6 +353,7 @@ export default function ResultPanel({
   rankingContext,
   scoreComparison,
   safetyFromScores,
+  hinterland,
   extraSources,
   onChangeIndustry,
   onChangeLocation,
@@ -358,6 +365,8 @@ export default function ResultPanel({
   scoreComparison?: ScoreComparison | null;
   /** /api/safety 실데이터에서 파생한 치안 통계 (목업이면 null — 예시 경로로 폴백) */
   safetyFromScores?: SafetyDetail | null;
+  /** /api/hinterland 배후지 실측 (⑦ 섹션). 없으면 '데이터 없음' 안내 */
+  hinterland?: HinterlandResult | null;
   /** 모델 응답 밖에서 실제로 사용한 추가 출처 (치안 실데이터 등) */
   extraSources?: string[];
   onChangeIndustry: () => void;
@@ -401,8 +410,6 @@ export default function ResultPanel({
 
   // 상세 분석(실측 원천값) — 목업 폴백에는 없음 (섹션 자동 생략)
   const detail = result.detail ?? null;
-  // 배후지 '예시 데이터' — 상권 코드 기반 결정적 생성 (⑥ 섹션에 배지로 명시)
-  const hinterland = mockHinterland(result.sangwon.code);
 
   return (
     <div className="space-y-3.5">
@@ -1006,59 +1013,150 @@ export default function ResultPanel({
         );
       })()}
 
-      {/* ── ⑦ 배후지 분석 — 예시 데이터 (실데이터 미보유) ── */}
-      <Section n={7} title="배후지 분석" aside="주거·직장·소득·임대">
-        <div className="mb-3 rounded-md border border-caution/40 bg-caution/10 px-2.5 py-2 text-[10px] leading-relaxed text-caution">
-          ⚠ 예시 데이터 — 아래 수치는 실데이터 미보유 항목의 UI 시연용으로, 상권 코드 기반으로
-          생성한 가상 값입니다. 실제 상권 특성과 무관하며, 실서비스에서는 상주인구·직장인구·
-          소득소비·임대시세 공공 데이터셋을 연동합니다.
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <div className="rounded-lg bg-ink-700/50 px-3 py-2.5">
-            <div className="text-[10px] text-faint">주거인구</div>
-            <div className="mt-0.5 text-base font-semibold text-fg" style={{ fontFamily: "var(--font-numeric)" }}>
-              {formatPeople(hinterland.residents)}
+      {/* ── ⑦ 배후지 분석 — 실측 (항목별 기준 분기가 다름) ── */}
+      {(() => {
+        const h = hinterland?.hinterland ?? null;
+        const isMock = !hinterland || hinterland.sourceMode === "mock" || !h;
+        if (isMock) {
+          return (
+            <Section n={7} title="배후지 분석" aside="주거·직장·시설">
+              <div className="rounded-md border border-caution/40 bg-caution/10 px-2.5 py-2 text-[10px] leading-relaxed text-caution">
+                ⚠ 배후지 데이터 없음 — 이 상권의 상주·직장인구 등이 원본 데이터셋에 없거나
+                산출물이 준비되지 않았습니다. 없는 값을 예시로 채우지 않습니다.
+              </div>
+            </Section>
+          );
+        }
+        const asOfChip = (q: string) => (
+          <span className="rounded border border-line bg-ink-700/60 px-1 py-px text-[9px] text-muted">
+            {q}
+          </span>
+        );
+        const topSlice = (arr?: RatioSlice[] | null) => topOf(arr ?? null);
+        return (
+          <Section n={7} title="배후지 분석" aside="이 상권에 손님을 공급하는 생활권">
+            <div className="grid grid-cols-2 gap-2">
+              {h.resident?.total != null && (
+                <div className="rounded-lg bg-ink-700/50 px-3 py-2.5">
+                  <div className="flex items-center gap-1 text-[10px] text-faint">
+                    주거(상주)인구 {asOfChip(h.resident.asOf)}
+                  </div>
+                  <div className="mt-0.5 text-base font-semibold text-fg" style={{ fontFamily: "var(--font-numeric)" }}>
+                    {formatPeople(h.resident.total)}
+                  </div>
+                  {topSlice(h.resident.byAge) && (
+                    <div className="mt-0.5 text-[10px] text-muted">
+                      최다 {AGE_KO[topSlice(h.resident.byAge)!.label] ?? topSlice(h.resident.byAge)!.label}{" "}
+                      {(topSlice(h.resident.byAge)!.ratio * 100).toFixed(0)}%
+                    </div>
+                  )}
+                </div>
+              )}
+              {h.worker?.total != null && (
+                <div className="rounded-lg bg-ink-700/50 px-3 py-2.5">
+                  <div className="flex items-center gap-1 text-[10px] text-faint">
+                    직장인구 {asOfChip(h.worker.asOf)}
+                  </div>
+                  <div className="mt-0.5 text-base font-semibold text-fg" style={{ fontFamily: "var(--font-numeric)" }}>
+                    {formatPeople(h.worker.total)}
+                  </div>
+                  {h.resident?.total ? (
+                    <div className="mt-0.5 text-[10px] text-muted">
+                      주거 대비 {(h.worker.total / h.resident.total).toFixed(1)}배
+                    </div>
+                  ) : null}
+                </div>
+              )}
+              {h.apartment && (h.apartment.complexes != null || h.apartment.avgPriceKRW != null) && (
+                <div className="rounded-lg bg-ink-700/50 px-3 py-2.5">
+                  <div className="flex items-center gap-1 text-[10px] text-faint">
+                    아파트 {asOfChip(h.apartment.asOf)}
+                  </div>
+                  <div className="mt-0.5 text-base font-semibold text-fg" style={{ fontFamily: "var(--font-numeric)" }}>
+                    {h.apartment.complexes != null ? `${h.apartment.complexes.toLocaleString()}단지` : "―"}
+                  </div>
+                  <div className="mt-0.5 text-[10px] text-muted">
+                    {h.apartment.avgPriceKRW != null && <>평균 {formatKRW(h.apartment.avgPriceKRW)}</>}
+                    {h.apartment.avgAreaM2 != null && <> · {h.apartment.avgAreaM2}㎡</>}
+                  </div>
+                </div>
+              )}
+              {h.facility?.total != null && (
+                <div className="rounded-lg bg-ink-700/50 px-3 py-2.5">
+                  <div className="flex items-center gap-1 text-[10px] text-faint">
+                    집객시설 {asOfChip(h.facility.asOf)}
+                  </div>
+                  <div className="mt-0.5 text-base font-semibold text-fg" style={{ fontFamily: "var(--font-numeric)" }}>
+                    {h.facility.total.toLocaleString()}개
+                  </div>
+                  {h.facility.items?.[0] && (
+                    <div className="mt-0.5 text-[10px] text-muted">
+                      최다 {h.facility.items[0].label} {h.facility.items[0].count}개
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-            <div className="mt-0.5 text-[10px] text-muted">{hinterland.households.toLocaleString()}가구</div>
-          </div>
-          <div className="rounded-lg bg-ink-700/50 px-3 py-2.5">
-            <div className="text-[10px] text-faint">직장인구</div>
-            <div className="mt-0.5 text-base font-semibold text-fg" style={{ fontFamily: "var(--font-numeric)" }}>
-              {formatPeople(hinterland.workers)}
-            </div>
-            <div className="mt-0.5 text-[10px] text-muted">아파트 비율 {(hinterland.aptRatio * 100).toFixed(0)}%</div>
-          </div>
-          <div className="rounded-lg bg-ink-700/50 px-3 py-2.5">
-            <div className="text-[10px] text-faint">주거인구 소득수준</div>
-            <div className="mt-0.5 text-base font-semibold text-fg" style={{ fontFamily: "var(--font-numeric)" }}>
-              {hinterland.incomeDecile}분위
-            </div>
-            <div className="mt-0.5 text-[10px] text-muted">{incomeDecileRange(hinterland.incomeDecile)}</div>
-          </div>
-          <div className="rounded-lg bg-ink-700/50 px-3 py-2.5">
-            <div className="text-[10px] text-faint">1층 환산 임대시세</div>
-            <div className="mt-0.5 text-base font-semibold text-fg" style={{ fontFamily: "var(--font-numeric)" }}>
-              {formatKRW(hinterland.rentPer33m2)}
-            </div>
-            <div className="mt-0.5 text-[10px] text-muted">3.3㎡당 월 환산</div>
-          </div>
-        </div>
-        <SubBlock title="소비 트렌드" aside="카테고리 비중">
-          <SliceBarChart data={hinterland.consumption} />
-        </SubBlock>
-        <SubBlock title="주요 집객시설">
-          <div className="flex flex-wrap gap-1.5">
-            {hinterland.facilities.map((f) => (
-              <span
-                key={f.label}
-                className="rounded-full border border-line/60 bg-ink-700/50 px-2 py-1 text-[10.5px] text-muted"
+
+            {h.resident?.byAge && (
+              <SubBlock title="배후지 연령 구성" aside={`상주인구 기준 · ${h.resident.asOf}`}>
+                <SliceBarChart data={h.resident.byAge} />
+              </SubBlock>
+            )}
+            {h.resident?.byGender && (
+              <SubBlock title="배후지 성별 구성">
+                <GenderSplit data={h.resident.byGender} />
+              </SubBlock>
+            )}
+            {h.spending?.byCategory && (
+              <SubBlock
+                title="배후지 소비지출"
+                aside={
+                  <>
+                    총 {h.spending.totalKRW != null ? formatKRW(h.spending.totalKRW) : "―"} ·{" "}
+                    <b className="text-caution/90">{h.spending.asOf} 기준</b>
+                  </>
+                }
               >
-                {f.label} <b className="text-fg/90" style={{ fontFamily: "var(--font-numeric)" }}>{f.count}</b>
-              </span>
-            ))}
-          </div>
-        </SubBlock>
-      </Section>
+                <SliceBarChart data={h.spending.byCategory} />
+                <p className="mt-1.5 text-[9.5px] leading-relaxed text-faint">
+                  소비지출은 원본이 <b className="text-muted">{h.spending.asOf} 이후 미공개</b>라 다른 블록보다
+                  과거 값입니다. 매출 데이터와 겹치는 분기가 없어 예측 모델에는 사용하지 않습니다.
+                </p>
+              </SubBlock>
+            )}
+            {h.facility?.items && h.facility.items.length > 0 && (
+              <SubBlock title="주요 집객시설" aside={h.facility.asOf}>
+                <div className="flex flex-wrap gap-1.5">
+                  {h.facility.items.map((f: { label: string; count: number }) => (
+                    <span
+                      key={f.label}
+                      className="rounded-full border border-line/60 bg-ink-700/50 px-2 py-1 text-[10.5px] text-muted"
+                    >
+                      {f.label}{" "}
+                      <b className="text-fg/90" style={{ fontFamily: "var(--font-numeric)" }}>{f.count}</b>
+                    </span>
+                  ))}
+                </div>
+              </SubBlock>
+            )}
+
+            {/* 데이터셋에 없어 뺀 항목 — 왜 없는지 밝힌다 (빈칸을 목업으로 채우지 않음) */}
+            {hinterland.unavailable.length > 0 && (
+              <div className="mt-3 border-t border-line/50 pt-2">
+                <div className="mb-1 text-[10px] text-faint">제공하지 않는 항목</div>
+                <ul className="space-y-0.5">
+                  {hinterland.unavailable.map((u: { item: string; reason: string }) => (
+                    <li key={u.item} className="text-[9.5px] leading-relaxed text-faint">
+                      · <b className="text-muted">{u.item}</b> — {u.reason}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </Section>
+        );
+      })()}
 
       {/* ── ⑧ 유의사항 · 한계 ───────────────────────────── */}
       <Section n={8} title="유의사항 · 한계">
@@ -1104,10 +1202,14 @@ export default function ResultPanel({
             지금 화면에서 작동하는 치안은 <b className="text-fg/80">종합점수 토글(사용자 선택, 5% 가중)</b> 뿐입니다.
             지역에 대한 단정적 판단의 근거로 사용하지 마세요.
           </li>
-          <li className="flex gap-1.5">
-            <span className="text-faint">·</span>
-            <b className="text-caution/90">배후지 분석(⑦)은 예시 데이터</b>로, 실제 상권 특성과 무관합니다 (실데이터셋 연동 전 UI 시연용).
-          </li>
+          {hinterland?.hinterland?.spending && (
+            <li className="flex gap-1.5">
+              <span className="text-faint">·</span>
+              배후지 분석(⑦)은 <b className="text-fg/80">항목별 기준 분기가 다릅니다</b> — 상주·직장인구·
+              아파트·집객시설은 최신이지만 <b className="text-fg/80">소비지출은 {hinterland.hinterland.spending.asOf} 이후
+              원본 미공개</b>라 그 시점 값입니다. 각 블록에 기준 분기를 표기했습니다.
+            </li>
+          )}
           <li className="flex gap-1.5">
             <span className="text-faint">·</span>
             모든 수치는 공공데이터 기반 참고 지표이며, 투자·창업 결정의 근거가 아닌 탐색 도구입니다.
