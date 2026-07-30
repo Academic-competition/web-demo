@@ -17,8 +17,8 @@ pnpm dev        # http://localhost:3000
 **모델 서버 없이도 실데이터로 동작한다.** `model-exports/` 에 담긴 정적 산출물
 (62업종 × 1,570상권, [`tools/export_web_static.py`](tools/export_web_static.py) 산출)이 기본 소스다.
 
-> 남은 과제·인계 사항은 **[docs/OPEN-ITEMS.md](docs/OPEN-ITEMS.md)** 에 정리되어 있다
-> (안전점수 실데이터 미보유, 매출 과대 추정, 배포 체크리스트 등).
+> 남은 과제·인계 사항은 **[docs/OPEN-ITEMS.md](docs/OPEN-ITEMS.md)**,
+> 모델 저장소에 넘길 작업 요청은 **[docs/MODEL-REQUESTS.md](docs/MODEL-REQUESTS.md)** 에 있다.
 
 라이브 모델 서버를 붙이려면 `.env.local` 의 `MODEL_SERVER_URL` 주석을 해제하고:
 
