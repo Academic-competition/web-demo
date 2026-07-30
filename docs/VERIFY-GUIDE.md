@@ -116,22 +116,38 @@ ml_beats_baseline_on_test = False
 과거 매출만 보고 예측하니 "지난 분기와 비슷하다" 를 학습한 셈입니다. 그래서 단순규칙을
 못 넘습니다. 새로운 정보(누가 사는지·일하는지)가 들어가야 넘어설 여지가 생깁니다.
 
-### 왜 안 들어갔나 — 설정에서 확인
+### 왜 안 들어갔나 — 수집 코드에서 확인
 
-`Commercial-AI-/config/data_sources.yaml` 61~78줄:
+진짜 원인은 수집 목록에 두 서비스가 **아예 없다**는 것입니다.
+`Commercial-AI-/src/legacy_api_config.py` 68줄:
+
+```python
+SERVICE_NAMES = {
+    "sales":      "VwsmTrdarSelngQq",   # 추정매출
+    "population": "VwsmTrdarFlpopQq",   # 유동인구
+    "store":      "VwsmTrdarStorQq",    # 점포
+    "area":       "TbgisTrdarRelm",     # 영역
+}   # ← 상주/직장인구가 이 목록에 없음 = 호출 자체가 안 됨
+```
+
+`config/data_sources.yaml` 61~78줄의 `verified: false` 는 코드가 읽는 스위치가 **아니라**
+"실제 API 호출로 확인 전"이라는 개발자 메모입니다 (그 값을 읽는 코드는 없습니다).
+`collect_data.py` 주석에 정책도 적혀 있습니다 — "검증 전 자동 수집하지 않음".
 
 ```yaml
 resident_population:
   service_name: VwsmTrdarRepopQq   # TODO: 실제 API 호출로 재검증
-  verified: false                  # ← false 라서 수집 대상에서 빠짐
+  verified: false                  # ← 스위치 아님. "미검증" 메모
 worker_population:
   service_name: VwsmTrdarWrcPopltnQq
   verified: false
 ```
 
-같은 파일 11~12줄에 이유가 적혀 있습니다 — "실제 API 응답으로 재검증 후 true 로 갱신할 것".
-**저희가 그 데이터셋을 실제로 받아서 서비스명이 맞는 걸 확인했으니, 이제 `true` 로 올릴 수
-있습니다.** (상주인구 34,275행 / 직장인구 34,386행, 2021Q1~2026Q1)
+**좋은 소식**: 전처리 매핑(`src/preprocessing/aliases.py` 81줄~)은 이미 준비돼 있어서,
+`SERVICE_NAMES` 에 두 줄 추가 + API 호출 확인이면 수집이 뚫립니다. 저희가 두 데이터셋을
+CSV로 받아 내용도 확인했습니다 (상주인구 34,275행 / 직장인구 34,386행, 2021Q1~2026Q1).
+단, 서비스명·영문 필드명(`TOT_REPOP_CO` 등)이 맞는지는 **실제 호출 1번으로 최종 확인** 후
+`verified: true` 로 올려 주세요.
 
 직접 열어보실 수 있습니다:
 
