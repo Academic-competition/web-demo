@@ -100,6 +100,7 @@ export default function MapView({
   heatmapMetric,
   composite,
   selectedCode,
+  highlightCode,
   pickedPoint,
   onPickPoint,
   onSelectSangwon,
@@ -110,6 +111,8 @@ export default function MapView({
   heatmapMetric: HeatmapMetric;
   composite?: CompositeOverlay | null;
   selectedCode: number | null;
+  /** 추천 리스트 hover ↔ 지도 연동 — 해당 상권 원을 강조 (golmok 양방향 패턴) */
+  highlightCode?: number | null;
   pickedPoint: { lat: number; lng: number } | null;
   onPickPoint: (lat: number, lng: number) => void;
   onSelectSangwon: (code: number) => void;
@@ -151,6 +154,7 @@ export default function MapView({
       composite={composite}
       sangwons={sangwons}
       selectedCode={selectedCode}
+      highlightCode={highlightCode ?? null}
       pickedPoint={pickedPoint}
       onPickPoint={onPickPoint}
       onSelectSangwon={onSelectSangwon}
@@ -168,6 +172,7 @@ function KakaoMap({
   composite,
   sangwons,
   selectedCode,
+  highlightCode,
   pickedPoint,
   onPickPoint,
   onSelectSangwon,
@@ -178,6 +183,7 @@ function KakaoMap({
   composite?: CompositeOverlay | null;
   sangwons: Sangwon[];
   selectedCode: number | null;
+  highlightCode: number | null;
   pickedPoint: { lat: number; lng: number } | null;
   onPickPoint: (lat: number, lng: number) => void;
   onSelectSangwon: (code: number) => void;
@@ -185,6 +191,8 @@ function KakaoMap({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const circlesRef = useRef<any[]>([]);
+  /** 상권코드 → {circle, color} — 하이라이트 원복에 원래 색이 필요하다 */
+  const circleByCodeRef = useRef<Map<number, { circle: any; color: string }>>(new Map());
   const selectedOverlayRef = useRef<any>(null);
   const pickedMarkerRef = useRef<any>(null);
   const clickHandlerRef = useRef(onPickPoint);
@@ -215,6 +223,7 @@ function KakaoMap({
 
     circlesRef.current.forEach((c) => c.setMap(null));
     circlesRef.current = [];
+    circleByCodeRef.current.clear();
 
     if (mode !== "industry" || !heatmap) return;
 
@@ -233,9 +242,28 @@ function KakaoMap({
         onSelectSangwon(cell.sangwonCode)
       );
       circlesRef.current.push(circle);
+      circleByCodeRef.current.set(cell.sangwonCode, { circle, color });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, heatmap, heatmapMetric, composite]);
+
+  // 추천 리스트 hover → 해당 원 강조 (원복을 위해 이전 강조를 기억)
+  const prevHighlightRef = useRef<number | null>(null);
+  useEffect(() => {
+    const prev = prevHighlightRef.current;
+    if (prev != null && prev !== highlightCode) {
+      const e = circleByCodeRef.current.get(prev);
+      e?.circle.setOptions({ strokeWeight: 0, fillColor: e.color, fillOpacity: 0.62 });
+      e?.circle.setZIndex?.(0);
+    }
+    if (highlightCode != null) {
+      const e = circleByCodeRef.current.get(highlightCode);
+      // 골드 테두리 + 불투명도 상승 — 색상환을 바꾸지 않아 범례 해석이 유지된다
+      e?.circle.setOptions({ strokeWeight: 3, strokeColor: "#e3b65a", strokeOpacity: 0.95, fillOpacity: 0.95 });
+      e?.circle.setZIndex?.(10);
+    }
+    prevHighlightRef.current = highlightCode;
+  }, [highlightCode]);
 
   // 선택 상권 하이라이트 + 이동
   useEffect(() => {

@@ -7,7 +7,7 @@
  *  - 업종 먼저(UC-002): 업종 선택 → 히트맵 → 상권 클릭 → 분석
  *  - 재탐색(UC-003): 결과 이후 조건 변경 시 자동 재질의
  */
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import InspectorConsole from "@/components/InspectorConsole";
 import MapView, { type HeatmapMetric } from "@/components/MapView";
@@ -17,7 +17,17 @@ import ResultPanel, {
   LoadingState,
   OnboardingCard,
 } from "@/components/ResultPanel";
+import RecentHistory from "@/components/RecentHistory";
 import TopIndustriesPanel from "@/components/TopIndustriesPanel";
+import TopSangwonsPanel from "@/components/TopSangwonsPanel";
+import {
+  clearHistory,
+  getHistoryServerSnapshot,
+  getHistorySnapshot,
+  pushHistory,
+  subscribeHistory,
+  type HistoryEntry,
+} from "@/lib/history";
 import { nearestSangwon, MAX_SNAP_METERS } from "@/lib/geo";
 import {
   useAnalyze,
@@ -46,6 +56,29 @@ export default function Home() {
     suggestion: { code: number; name: string | null; distance: number } | null;
   } | null>(null);
   const [heatmapMetric, setHeatmapMetric] = useState<HeatmapMetric>("sales");
+  /** 추천 상권 리스트 hover ↔ 지도 원 강조 (TopSangwonsPanel → MapView) */
+  const [highlightCode, setHighlightCode] = useState<number | null>(null);
+  /** 최근 분석 이력 — 외부 스토어(localStorage) 구독. 서버 스냅샷은 빈 배열이라 SSR 안전 */
+  const history = useSyncExternalStore(
+    subscribeHistory,
+    getHistorySnapshot,
+    getHistoryServerSnapshot
+  );
+
+  // 분석이 성공할 때마다 이력에 기록 (같은 상권×업종은 최신 1건으로 갱신).
+  // pushHistory 는 외부 스토어 액션이라 effect 안에서 setState 를 부르지 않는다.
+  const analyzeData = analyze.data;
+  useEffect(() => {
+    if (!analyzeData || analyzeData.status !== "ok") return;
+    pushHistory({
+      sangwonCode: analyzeData.sangwon.code,
+      industryCode: analyzeData.industry.code,
+      sangwonName: analyzeData.sangwon.name,
+      industryName: analyzeData.industry.name,
+      grade: analyzeData.survival?.grade ?? null,
+      ts: Date.now(),
+    });
+  }, [analyzeData]);
   /** 종합점수에 자치구 안전점수 5%를 반영할지 — 사용자가 선택한다 (기본 미반영) */
   const [safetyOn, setSafetyOn] = useState(false);
 
@@ -264,6 +297,17 @@ export default function Home() {
     setBoundaryNotice(null);
   };
 
+  /** 이력 클릭 → 해당 상권×업종 재조회 (스냅샷 재생이 아니라 최신 데이터로 다시 분석) */
+  const handlePickHistory = useCallback(
+    (e: HistoryEntry) => {
+      setBoundaryNotice(null);
+      setIndustryCode(e.industryCode);
+      setSelectedCode(e.sangwonCode);
+      runAnalyze(e.sangwonCode, e.industryCode);
+    },
+    [runAnalyze]
+  );
+
   return (
     <div className="flex h-full flex-col lg:flex-row">
       {/* ── 좌: 지도 ─────────────────────────────────────── */}
@@ -283,6 +327,7 @@ export default function Home() {
               : null
           }
           selectedCode={selectedCode}
+          highlightCode={highlightCode}
           pickedPoint={pickedPoint}
           onPickPoint={handlePickPoint}
           onSelectSangwon={handleSelectSangwon}
@@ -511,24 +556,56 @@ export default function Home() {
                 runAnalyze(selectedCode!, code);
               }}
             />
-          ) : !onboarded && selectedCode == null && !industryCode && !pickedPoint && !hasAnalyzedRef.current ? (
-            /* 첫 진입: 기능 나열 대신 질문으로 시작 (golmok 온보딩 패턴) */
-            <OnboardingCard
-              onPickLocation={() => {
-                setOnboarded(true);
-                switchMode("location");
-              }}
-              onPickIndustry={() => {
-                setOnboarded(true);
-                switchMode("industry");
-                setTimeout(
-                  () => document.querySelector<HTMLSelectElement>("aside select")?.focus(),
-                  80
-                );
+          ) : mode === "industry" && industryCode && heatmap.data ? (
+            /* 업종 먼저: 색칠만으로는 "어디가 좋은데?"에 답이 안 된다 — 상위 10곳을 순위로 (golmok Top-10 패턴) */
+            <TopSangwonsPanel
+              heatmap={heatmap.data}
+              metric={heatmapMetric}
+              compositeByCode={
+                heatmapMetric === "composite" && compositeScores
+                  ? (safetyOn ? compositeScores.withSafety : compositeScores.base)
+                  : null
+              }
+              safetyOn={safetyOn}
+              industryName={industries.find((i) => i.code === industryCode)?.name ?? null}
+              onHover={setHighlightCode}
+              onPick={(code) => {
+                setHighlightCode(null);
+                handleSelectSangwon(code);
               }}
             />
+          ) : !onboarded && selectedCode == null && !industryCode && !pickedPoint && !hasAnalyzedRef.current ? (
+            /* 첫 진입: 기능 나열 대신 질문으로 시작 (golmok 온보딩 패턴) + 재방문자용 이력 */
+            <>
+              <OnboardingCard
+                onPickLocation={() => {
+                  setOnboarded(true);
+                  switchMode("location");
+                }}
+                onPickIndustry={() => {
+                  setOnboarded(true);
+                  switchMode("industry");
+                  setTimeout(
+                    () => document.querySelector<HTMLSelectElement>("aside select")?.focus(),
+                    80
+                  );
+                }}
+              />
+              <RecentHistory
+                entries={history}
+                onPick={handlePickHistory}
+                onClear={clearHistory}
+              />
+            </>
           ) : (
-            <IdleState mode={mode} />
+            <>
+              <IdleState mode={mode} />
+              <RecentHistory
+                entries={history}
+                onPick={handlePickHistory}
+                onClear={clearHistory}
+              />
+            </>
           )}
         </div>
 

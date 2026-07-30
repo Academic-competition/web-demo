@@ -16,6 +16,7 @@ import type {
   RatioSlice,
   SafetyDetail,
 } from "@/lib/contracts";
+import { competitionAdvice, footTrafficAdvice, revenueAdvice } from "@/lib/advice";
 import { formatKRW, formatKRWCompact, formatPeople, pctChange } from "@/lib/format";
 import { mockSafety } from "@/lib/mockExtras";
 import SurvivalGauge from "./SurvivalGauge";
@@ -40,6 +41,9 @@ function topOf(arr?: RatioSlice[] | null): RatioSlice | null {
 /** 유동인구 축약 (차트 라벨용) */
 const formatPeopleCompact = (v: number) =>
   v >= 1e4 ? `${Math.round(v / 1e4)}만` : Math.round(v).toLocaleString();
+
+/** 백분위 → "상위 N%" — 백분위 100(1위권)이 "상위 0%"로 찍히지 않게 하한 1% */
+const topPctLabel = (pct: number) => `상위 ${Math.max(1, Math.round(100 - pct))}%`;
 
 /**
  * 생존율 집계 단위 라벨 — survival.granularity 로만 판단한다 (문구 하드코딩 금지).
@@ -475,7 +479,7 @@ export default function ResultPanel({
           />
         )}
         {pct != null && (
-          <StatTile label="동일업종 내" value={`상위 ${(100 - pct).toFixed(0)}%`} tone="text-gold" hint="예상매출 백분위" />
+          <StatTile label="동일업종 내" value={topPctLabel(pct)} tone="text-gold" hint="예상매출 백분위" />
         )}
         {rankingContext && (
           <StatTile
@@ -512,7 +516,7 @@ export default function ResultPanel({
               예상 월매출 <b className="text-fg">{formatKRW(result.revenue.monthlyEstimateKRW)}</b>
               {pct != null && (
                 <>
-                  {" "}— 동일 업종 상권 중 <b className="text-gold">상위 {(100 - pct).toFixed(0)}%</b>
+                  {" "}— 동일 업종 상권 중 <b className="text-gold">{topPctLabel(pct)}</b>
                 </>
               )}
               <span className="text-muted"> ({result.revenue.scaleLabel} 규모).</span>
@@ -528,6 +532,11 @@ export default function ResultPanel({
                     .
                   </>
                 );
+              })()}
+              {/* 값 → 판단 → 조언 (규칙 기반 — 문턱값은 lib/advice.ts) */}
+              {(() => {
+                const a = revenueAdvice(pct);
+                return a ? <span className="text-muted"> {a}</span> : null;
               })()}
             </Bullet>
           )}
@@ -547,11 +556,14 @@ export default function ResultPanel({
                 <> · 프랜차이즈 {(result.context.competition.franchiseRatio * 100).toFixed(0)}%</>
               )}
               {result.context.competition.correction && <CorrectedBadge />}
-              {result.context.competition.granularity === "seoul_industry" ? (
-                <span className="text-muted"> (서울 전체 기준) — 경쟁 밀도를 함께 살펴보세요.</span>
-              ) : (
-                <span className="text-muted"> — 경쟁 밀도를 함께 살펴보세요.</span>
+              {result.context.competition.granularity === "seoul_industry" && (
+                <span className="text-muted"> (서울 전체 기준)</span>
               )}
+              {/* 값 → 판단 → 조언 (규칙 기반 — 문턱값은 lib/advice.ts) */}
+              {(() => {
+                const a = competitionAdvice(result);
+                return a ? <span className="text-muted"> — {a}</span> : <span className="text-muted">.</span>;
+              })()}
             </Bullet>
           )}
           {result.context?.footTraffic && (
@@ -564,6 +576,11 @@ export default function ResultPanel({
                 </>
               )}
               .
+              {/* 값 → 판단 → 조언 (규칙 기반 — 문턱값은 lib/advice.ts) */}
+              {(() => {
+                const a = footTrafficAdvice(result);
+                return a ? <span className="text-muted"> {a}</span> : null;
+              })()}
             </Bullet>
           )}
         </ul>
@@ -621,7 +638,7 @@ export default function ResultPanel({
             {pct != null && (
               <div className="shrink-0 text-right">
                 <div className="text-lg font-semibold text-gold" style={{ fontFamily: "var(--font-numeric)" }}>
-                  상위 {(100 - pct).toFixed(0)}%
+                  {topPctLabel(pct)}
                 </div>
                 <div className="text-[10px] text-faint">동일 업종 상권 중</div>
               </div>
