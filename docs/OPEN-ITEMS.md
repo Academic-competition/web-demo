@@ -7,6 +7,7 @@
 >
 > **모델 개선 실험을 실제로 돌렸고, ML 이 처음으로 나이브 규칙을 이겼다** (test MAE −3.04%).
 > 전체 내용은 **[docs/MODEL-EXPERIMENT-REPORT.md](MODEL-EXPERIMENT-REPORT.md)** 참조.
+> 배경지식 없이 읽으려면 [쉬운 해설판](MODEL-EXPERIMENT-EXPLAINED.md) (팀 공유용, 비유 중심).
 > 아래 §2·§3·§6·§9 의 결론이 **바뀌었으니 옛 서술을 그대로 믿지 말 것.**
 >
 > | 기존 가설 | 실험 결과 |
