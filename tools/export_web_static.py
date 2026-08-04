@@ -25,8 +25,8 @@ Commercial-AI- 의 실데이터 산출물을 **웹 정적 폴백 스키마**로 
      원천에서 점포_수 는 '일반(비프랜차이즈)' 수이므로 그대로 쓰면 비율이 100% 를 넘는다.
      여기서는 올바른 컬럼을 직접 쓰므로 역산이 필요 없다.
   3) 매출 = predicted_sales_per_store (점포당·다음 분기 예측) → revenue.basis="per_store_predicted"
-     ⚠️ 이 값은 학습 타깃의 분모가 '일반 점포 수'라 프랜차이즈 비중이 큰 업종에서 과대다.
-        모델 재학습 없이는 고칠 수 없어 그대로 내보내고 basis 로 표시한다.
+     분모 오류(일반 점포 수)는 모델 저장소 cbaab3d 재학습으로 해소됐다 — 이제 전체 점포
+     (독립+프랜차이즈) 기준이다. 재생성 전후 중앙값: 편의점 0.25배 · 치킨 0.37배 · 한식 0.90배.
 
 실행:
     # academy 루트에서 (cwd 무관 — 경로는 __file__ 기준으로 해석된다)
@@ -474,8 +474,8 @@ def main() -> int:
     print(f"   heatmap {len(sv['서비스_업종_코드'].unique())}개 업종 · 셀 {n_cells:,}")
     print(f"   analyze 레코드 {n_records:,} · by-sangwon 상권 {len(by_sangwon):,}")
     print(f"   dataAsOf={data_as_of} · survivalGranularity=sangwon_industry")
-    print("\n⚠️ 예상 매출은 '점포당 예측값'이며, 학습 타깃 분모가 일반 점포 수라 프랜차이즈")
-    print("   비중이 큰 업종에서 과대 추정입니다 (revenue.basis=per_store_predicted).")
+    print("\nℹ️ 예상 매출은 '점포당 예측값'입니다 (revenue.basis=per_store_predicted).")
+    print("   프랜차이즈 포함 전체 점포 평균이므로 독립 점포의 실제 매출과는 다를 수 있습니다.")
     return 0
 
 

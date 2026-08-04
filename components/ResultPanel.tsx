@@ -1198,10 +1198,10 @@ export default function ResultPanel({
             <li className="flex gap-1.5">
               <span className="text-faint">·</span>
               <span>
-                <b className="text-fg/80">점포 수·프랜차이즈 비율은 보정된 값</b>입니다 (④ 참조).
-                모델 서버가 점포 수를 일반(비프랜차이즈) 기준으로 반환해 원천 항등식으로 역산했습니다.
-                <b className="text-fg/80"> 예상 매출은 같은 원인으로 과대 추정</b>되어 있으며
-                모델 재학습 전까지 보정할 수 없습니다.
+                {/* 보정 사유는 서버 주입값(correction)을 그대로 쓴다 — 원인을 여기 하드코딩하면
+                    상류가 고쳐졌을 때 화면에만 낡은 설명이 남는다 (2026-08-04 실제로 발생) */}
+                <b className="text-fg/80">점포 수·프랜차이즈 비율은 보정된 값</b>입니다 (④ 참조).{" "}
+                {result.context.competition.correction}
               </span>
             </li>
           )}

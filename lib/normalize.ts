@@ -211,56 +211,35 @@ function survivalFromClosure(
 const REVENUE_SCALE_NOTE_PER_STORE =
   "동일 업종 점포 1곳의 평균 규모 예측값입니다 (상권 전체 합산 아님). " +
   "기간 기준은 원천 데이터의 '당월' 정의를 따르며 확정되지 않았습니다. " +
-  "학습 타깃의 점포 수 분모가 프랜차이즈를 제외한 값이어서, " +
-  "프랜차이즈 비중이 큰 업종에서는 과대 추정될 수 있습니다.";
+  "프랜차이즈와 독립 점포를 모두 포함한 평균이므로, " +
+  "프랜차이즈 비중이 큰 업종에서는 독립 점포의 실제 매출과 다를 수 있습니다.";
 /** KPI 타일·요약용 짧은 라벨 — 위 scaleNote 와 항상 같은 의미를 유지할 것 */
 const REVENUE_SCALE_LABEL_PER_STORE = "점포당 평균";
 
 const CONFIDENCE_LEVELS = new Set(["high", "medium", "low"]);
 
 /**
- * 상류 정의 오류 보정 — 점포 수 · 프랜차이즈 비율 (라이브 경로 전용)
+ * 점포 수 · 프랜차이즈 비율 읽기 (라이브 경로)
  *
- * 모델 서버의 `competition.storeCount` 는 원천 CSV 의 `STOR_CO`(=점포_수)이고,
- * 이 값은 전체 점포가 아니라 **일반(비프랜차이즈) 점포 수**다. 따라서
- * `franchiseRatio`(=프랜차이즈/일반)는 1.0 을 넘을 수 있다.
- * 실측: 라이브 스냅샷 17,764행 중 1,122행(6.3%)이 100% 초과, 최대 1400%.
- * (예: 이태원 관광특구 편의점 → storeCount 4, ratio 5.0 → "프랜차이즈 500%")
+ * 과거에는 여기서 역산 보정을 했다. 모델 서버가 `competition.storeCount` 로
+ * `STOR_CO`(=일반/비프랜차이즈 점포 수)를 주고 `franchiseRatio` 를 프랜차이즈/일반
+ * 으로 계산해서, 비율이 1.0 을 넘었기 때문이다 (실측 최대 1400%).
  *
- * 원천에서 `STOR_CO + FRC_STOR_CO == SIMILR_INDUTY_STOR_CO` 가 767,251행 **전부**
- * 항등식으로 성립함을 확인했으므로 전체 점포 수를 정확히 역산할 수 있다:
- *     전체 점포 = 일반 × (1 + 비율)
- *     올바른 비율 = 비율 / (1 + 비율)
- * 역산 검증 결과 17,764/17,764 (100.00%) 가 원천 `유사_업종_점포_수` 와 일치.
+ * **상류에서 고쳐졌으므로 보정을 제거했다** (2026-08-04, 모델 저장소 cbaab3d):
+ *   - `api/server.py:208` → `storeCount = 전체_점포_수` (독립 + 프랜차이즈)
+ *   - `src/features/build.py:113` → `프랜차이즈_비율 = 프랜차이즈/전체` (0~1 보장)
+ * 서빙 테이블 21,452행 검증: 비율 최대 1.0 · 1.0 초과 0건 ·
+ * `전체_점포_수 == 점포_수 + 프랜차이즈_점포_수` 불일치 0건.
  *
- * 한계 1: 일반 점포가 0이면 비율이 NaN 으로 오므로 역산 불가 (127행, 0.71%) → 미보정.
- * 한계 2: 예측 매출(점포당)도 같은 분모 오류를 갖지만 그건 **학습 타깃**이라 여기서
- *         고칠 수 없다. 근본 해결은 파이프라인에서 분모를 유사_업종_점포_수 로 바꾸고
- *         재학습하는 것이다.
+ * 여기서 역산을 유지하면 이미 전체인 값에 (1+비율)을 또 곱하는 **이중 보정**이 된다.
+ * 보정을 되살려야 할 상황이면 상류가 되돌아간 것이므로 서버 쪽을 먼저 확인할 것.
  */
-function correctStoreCounts(rawStoreCount: unknown, rawRatio: unknown) {
-  const general = rawStoreCount != null ? Number(rawStoreCount) : null;
-  const ratio = rawRatio != null && Number.isFinite(Number(rawRatio)) ? Number(rawRatio) : null;
-
-  if (general == null || !Number.isFinite(general) || ratio == null || ratio < 0) {
-    return { storeCount: general, franchiseRatio: ratio, correction: null as string | null };
-  }
-
-  const total = Math.round(general * (1 + ratio));
-  const correctedRatio = ratio / (1 + ratio);
-  if (total === general) {
-    // 프랜차이즈가 없으면(ratio=0) 보정 전후가 같다 — 안내를 붙이지 않는다
-    return { storeCount: general, franchiseRatio: correctedRatio, correction: null };
-  }
-
-  return {
-    storeCount: total,
-    franchiseRatio: correctedRatio,
-    correction:
-      `모델 서버는 점포 수를 '일반(비프랜차이즈) ${general}개'로, 프랜차이즈 비율을 ` +
-      `일반 점포 대비 값(${Math.round(ratio * 100)}%)으로 반환합니다. ` +
-      `원천 데이터의 항등식으로 전체 ${total}개를 역산해 비율을 다시 계산했습니다.`,
-  };
+function readStoreCounts(rawStoreCount: unknown, rawRatio: unknown) {
+  const storeCount =
+    rawStoreCount != null && Number.isFinite(Number(rawStoreCount)) ? Number(rawStoreCount) : null;
+  const franchiseRatio =
+    rawRatio != null && Number.isFinite(Number(rawRatio)) ? Number(rawRatio) : null;
+  return { storeCount, franchiseRatio, correction: null as string | null };
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -358,8 +337,8 @@ function normalizeSummary(
   const ageDist = raw?.customers?.ageDistribution;
   const predictedPerStore = raw?.sales?.predictedSalesPerStoreKRW;
 
-  // 점포 수 보정을 먼저 계산한다 — 보정된 전체 점포 수가 생존율 축소추정의 노출량이 된다
-  const comp = correctStoreCounts(raw?.competition?.storeCount, raw?.competition?.franchiseRatio);
+  // 점포 수를 먼저 읽는다 — 전체 점포 수가 생존율 축소추정의 노출량이 된다
+  const comp = readStoreCounts(raw?.competition?.storeCount, raw?.competition?.franchiseRatio);
   const surv = survivalFromClosure(raw?.competition?.closureRate, comp.storeCount, closurePrior);
 
   return {
@@ -401,7 +380,7 @@ function normalizeSummary(
           : null,
       competition: raw?.competition
         ? {
-            // 점포 수·프랜차이즈 비율은 상류 정의 오류를 여기서 보정한다 (근거는 위 함수 주석)
+            // 점포 수·프랜차이즈 비율은 상류가 이미 올바르다 (근거는 readStoreCounts 주석)
             ...comp,
             granularity: "sangwon_industry",
           }
