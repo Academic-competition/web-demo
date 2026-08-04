@@ -45,10 +45,15 @@
 > 모델 저장소에 커밋됐다. 팀원 신규 기능: 독립점포 k 추정·market_stage 버그 수정(560개
 > 상권 정정)·인구밀도 컬럼. 상세는 `git -C Commercial-AI- log` 의 `1a74dec`/`cbaab3d`.
 >
-> **지금 이어서 할 일**: **[docs/V2-REFRESH-HANDOFF.md](V2-REFRESH-HANDOFF.md)** —
-> 파이프라인 머신에서 model-exports 재생성 + 웹 문구·보정코드 정리를 한 배포로.
-> (개발 PC에서 시도한 결과와 2024 분기 부재 문제, 검증 커맨드까지 그 문서에 있다.)
-> 그 다음: 롤링 백테스트(§10 — walk_forward 4-fold 는 metadata 에 이미 들어옴).
+> ~~**지금 이어서 할 일**: V2-REFRESH-HANDOFF — model-exports 재생성 + 문구·보정코드 정리~~
+> → **✅ 8/4~8/5 완료·배포됨** (상단 8/04·8/05 블록 참조). 지금 남은 것:
+>
+> 1. **롤링 백테스트** (§10 — walk_forward 4-fold 는 metadata 에 이미 들어옴, 전 구간 확장)
+> 2. **v2 신규 필드 활용** (HANDOFF §4 — 독립점포 k·업종별 SMAPE·상권유형 5종 뱃지) — 유일한 미착수 항목
+> 3. 배후지 이월 3종(아파트·집객·소비지출)의 모델 수집 편입 — 팀원 합의 필요
+>
+> **머신 분업 규칙(중요)**: 개발 PC 는 웹 코드·문서 전담, `export_web_static.py` 재생성 금지.
+> 상세는 [V2-REFRESH-HANDOFF.md 부록](V2-REFRESH-HANDOFF.md#부록--개발-pc웹-작업용와의-분업).
 >
 > ⚠️ **머신이 두 대다.** `C:\_develop\academy` 에는 `.venv` 와 `data/` 가 **있어서
 > 파이프라인이 돈다**(2026-08-02 확인). 다른 머신에는 없고 대신 치안·배후지 원본 CSV 가 있다.
