@@ -2,6 +2,9 @@
 
 > 실험일: 2026-08-02 ~ 08-03 · 실행 환경: `C:\_develop\academy` (모델 파이프라인 실행 가능한 머신)
 > 관련 문서: [OPEN-ITEMS.md](OPEN-ITEMS.md) · [MODEL-REQUESTS.md](MODEL-REQUESTS.md) · [VERIFY-GUIDE.md](VERIFY-GUIDE.md)
+>
+> 📖 ML 배경지식 없이 읽으려면 **[해설판(MODEL-EXPERIMENT-EXPLAINED.md)](MODEL-EXPERIMENT-EXPLAINED.md)** 부터 —
+> 같은 내용을 쉬운 말로 풀었고, 발표·보고 시 참고 의견과 섹션 대응표가 있다.
 
 ## 한 줄 요약
 

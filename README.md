@@ -22,6 +22,8 @@ pnpm dev        # http://localhost:3000
 > 그 근거를 직접 확인하는 방법은 **[docs/VERIFY-GUIDE.md](docs/VERIFY-GUIDE.md)**,
 > 모델 저장소 코드를 처음 보는 사람을 위한 안내는
 > **[docs/MODEL-CODE-TOUR.md](docs/MODEL-CODE-TOUR.md)** 에 있다.
+> 2026-08 모델 개선 실험(ML 이 나이브를 이김)은 **[docs/MODEL-EXPERIMENT-REPORT.md](docs/MODEL-EXPERIMENT-REPORT.md)**,
+> 그 쉬운 해설판은 **[docs/MODEL-EXPERIMENT-EXPLAINED.md](docs/MODEL-EXPERIMENT-EXPLAINED.md)** 참조.
 
 라이브 모델 서버를 붙이려면 `.env.local` 의 `MODEL_SERVER_URL` 주석을 해제하고:
 
