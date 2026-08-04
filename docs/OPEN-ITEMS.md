@@ -109,26 +109,33 @@ Commercial-AI-/.venv/Scripts/python.exe sanggwon-web/tools/export_web_static.py 
 - **신호등 판정은 웹 route handler 책임** (safe≥0.60 / caution≥0.45)
 - **라이브는 옵트인** (`MODEL_SERVER_URL` 미설정 = 정적 사용)
 
-### 자주 하는 오해 (2026-07-28 정정)
+### 자주 하는 오해 (2026-08-04 v2 기준으로 전면 갱신)
 
-**"치안·부동산은 모델과 무관하다" — 틀렸다.** `models/model_metadata.json` 의 실제 피처 목록에
-`sf_crime_rate_per_100k`·`sf_arrest_rate`·`sf_cctv_per_km2`·`re_rent_per_m2`·`re_vacancy_rate`·
-`re_rent_index` 가 들어 있고, `chosen_step: "E_plus_safety"` / `external_features_included: true` —
-**ablation 에서 MAE 가 개선돼 채택된 학습 피처다.** (metadata 의 `features` 는 리스트가 아니라
-`{numeric, categorical}` dict 라 얕게 읽으면 "피처 2개"로 오독된다.)
+이 절은 **7/28 판에서 정반대로 뒤집혔다.** v1 은 "치안은 학습 피처인데 값이 NaN" 이었고,
+v2 는 "값은 채워졌고 학습 피처에서는 빠졌다" 다. 옛 서술을 그대로 옮기지 말 것.
 
-치안이 쓰이는 곳은 셋이고, 지금 살아있는 것은 세 번째뿐이다:
+**v2 실측** (`models/model_metadata.json`, 서빙 테이블 21,452행 직접 확인):
 
-| 경로 | 설계 | 현재 |
-|---|---|---|
-| 매출 예측 모델 학습 피처 | 포함 (ablation 채택) | **값이 NaN** → '모름' 처리, 예측값 평균 차이 ≈1.9% |
-| 종합진단 `overall_score` (기회점수의 원천) | `safety_score` 5% (`scoring_weights.yaml`) | NaN 성분 제외 후 **가중치 재정규화** → 실질 미반영 |
-| 웹 종합점수 '치안 반영' 토글 | `/api/safety` 5% (사용자 옵트인) | **동작** — 범죄 2024·CCTV 2025 실측 (§1) |
+| 변수 | 학습 피처 | 서빙 값 | 점수·지표 |
+|---|---|---|---|
+| 치안 `sf_*` 3개 | ❌ **제외** — ablation 이 `D_plus_real_estate` 채택 | ✅ **100% 채움** (21,452/21,452) | ✅ 종합진단 `safety_score` 5% + 웹 토글 5% |
+| 부동산 `re_*` 3개 | ✅ **포함** (`re_rent_per_m2`·`re_vacancy_rate`·`re_rent_index`) | ✅ 97% 채움 (20,864) | — |
 
-원인은 `prepare_feature_table.py` 가 외부 데이터 없이 파이프라인을 돌릴 때 이 6개 컬럼을
-NaN 으로만 만들어 주기 때문이다(0·평균 대치 금지 — 거짓 사실이 된다). **문서·UI 에 "모델에
-치안이 들어가지 않는다"고 쓰지 말 것.** 정확한 서술은 "학습에는 쓰이지만 현재 서빙 값이 비어
-있다" 다. (README '데이터 흐름' 섹션·`docs/data-flow.svg`·리포트 ⑧ 유의사항이 이 표현을 쓴다.)
+- `chosen_step: "D_plus_real_estate"` · `external_features_included: true` ·
+  `ml_beats_baseline_on_test: true` · `random_forest`
+- 제외는 결측 때문이 아니라 **정책**이며 metadata 에 명문화돼 있다 — `feature_selection.note`:
+  "부동산/안전 변수가 예측 성능을 개선하지 않으면 모델에서 제외되며, 이 경우 해당 변수는
+  Serving 의 점수·지표로만 활용된다"
+- ⚠️ **부동산이 채택된 근거는 약하다.** ablation 학습 구간(`t<=8097`)에 임대료·공실률 관측이
+  0건이라, 그 시점에 정보가 0인 변수가 0.07%(노이즈) 차이로 채택됐다. 최종 모델은 train+valid
+  재적합이라 값은 갖지만 중요도 합계가 0.19% 다 (`Commercial-AI-/README.md` §5)
+- metadata 의 `features` 는 리스트가 아니라 `{numeric, categorical}` dict 라 얕게 읽으면
+  "피처 2개"로 오독된다 — 이 함정은 v2 에서도 그대로다
+
+**쓰지 말아야 할 문장**: "치안이 학습에 쓰이지만 서빙 값이 비어 있다"(v1 서술, 이제 거짓) ·
+"치안은 모델과 무관하다"(매출 예측엔 맞지만 종합점수에는 반영되므로 오해를 만든다).
+**정확한 서술**: "치안은 실측값이 있으나 예측 성능 기여가 없어 학습 피처에서 제외됐고,
+점수·지표로 쓰인다."
 
 ### 데이터 함정
 

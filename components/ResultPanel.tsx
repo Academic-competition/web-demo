@@ -1214,9 +1214,9 @@ export default function ResultPanel({
           <li className="flex gap-1.5">
             <span className="text-faint">·</span>
             치안 참고(⑥)는 <b className="text-fg/80">자치구 단위</b> 경찰청 통계로 상권별 차이를 반영하지 않습니다.
-            모델은 치안을 학습 피처로 쓰도록 설계돼 있으나{" "}
-            <b className="text-fg/80">현재 서빙 값이 비어 있어 예상 매출·창업기회점수에는 반영되지 않았고</b>,
-            지금 화면에서 작동하는 치안은 <b className="text-fg/80">종합점수 토글(사용자 선택, 5% 가중)</b> 뿐입니다.
+            치안 지표는 실측값으로 채워져 있지만, 검증(ablation)에서 예측 성능을 개선하지 못해{" "}
+            <b className="text-fg/80">매출 예측 모델의 학습 피처에서는 제외</b>됐습니다 — 대신
+            종합점수의 안전점수(5%)와 참고 지표로 쓰입니다.
             지역에 대한 단정적 판단의 근거로 사용하지 마세요.
           </li>
           {hinterland?.hinterland?.spending && (
