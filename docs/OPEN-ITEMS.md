@@ -299,6 +299,18 @@ CSV 5종을 받아 `tools/build_hinterland.py` → `model-exports/meta/hinterlan
 (1,649 상권, 167KB) → `/api/hinterland` 로 연결했다. **`mockHinterland()` 는 삭제됐고, 데모에
 남은 목업은 치안 폴백(`mockSafety`, 실데이터 있으면 미호출) 하나뿐이다.**
 
+> 🔄 **2026-08-05 상주·직장인구 블록을 모델 저장소 소스로 교체.**
+> `export_web_static.py` 의 `rebuild_hinterland()` 가 `Commercial-AI-/data/raw/
+> {resident,worker}_population.csv`(API 수집본)로 두 블록을 다시 만든다.
+> 구판(포털 다운로드본)과 **1,633건 total 전수 일치·분포 비율까지 동일** — 같은
+> 데이터셋(OA-15584/15569)이므로 값 변화 없는 순수 소스 교체다.
+> 아파트·집객시설·소비지출은 모델 파이프라인 미수집이라 기존 gz 에서 **이월**한다
+> (수집 편입은 `data_sources.yaml` 수정 = 팀원 합의 필요). `build_hinterland.py` 는
+> 이월 3종의 원생산자로만 남는다.
+> 💡 **후속 발견**: 모델 API 수집본(상주인구-상권)에 `TOT_HSHLD_CO`(총 가구 수)가 있다 —
+> 아래 "확정된 데이터 한계"의 "총 가구 수는 없다"는 **아파트-상권 데이터셋 기준** 서술이며,
+> 상주인구 쪽으로는 제공 가능해졌다. UI 편입은 미착수.
+
 | 파일 (열린데이터광장) | 2025Q2 커버리지 | 값 있는 최신 분기 |
 |---|---|---|
 | `resident.csv` 상주인구-상권 (OA-15584) | 1,633 | 2026Q1 |

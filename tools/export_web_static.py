@@ -292,6 +292,99 @@ def load_safety_by_gu(repo: str, sv) -> tuple[dict, dict]:
     return detail_by_gu, scores_meta
 
 
+def rebuild_hinterland(repo: str, out: str) -> dict | None:
+    """
+    배후지(meta/hinterland.json.gz)의 **상주·직장인구 블록을 모델 저장소 데이터로 교체**
+    (2026-08-05 전환).
+
+    - 상주/직장인구: `Commercial-AI-/data/raw/{resident,worker}_population.csv`
+      (collect_data.py API 수집본, 21분기·최신 2026Q1) — 구판 포털 다운로드본과 같은
+      데이터셋(OA-15584/OA-15569)이므로 값이 일치해야 정상이다
+    - 아파트·집객시설·소비지출: 모델 파이프라인이 **수집하지 않는** 데이터라 기존
+      커밋본(gz)에서 이월(carry-over)한다. 원천이 모델 저장소 수집 목록에 들어오면
+      이 이월을 제거할 것 (data_sources.yaml 수정 = 팀원 합의 필요)
+
+    반환: 요약 dict (로그용) 또는 None (원천 CSV 미보유 환경).
+    """
+    import pandas as pd
+
+    gz_path = os.path.join(out, "meta", "hinterland.json.gz")
+    res_p = os.path.join(repo, "data", "raw", "resident_population.csv")
+    wrk_p = os.path.join(repo, "data", "raw", "worker_population.csv")
+    if not (os.path.exists(gz_path) and os.path.exists(res_p) and os.path.exists(wrk_p)):
+        return None
+
+    with gzip.open(gz_path) as f:
+        doc = json.load(f)
+
+    AGE_LABELS = [("10", "10s"), ("20", "20s"), ("30", "30s"),
+                  ("40", "40s"), ("50", "50s"), ("60_ABOVE", "60s+")]
+
+    def latest_rows(path: str, tot_col: str):
+        df = pd.read_csv(path, encoding="utf-8-sig")
+        df[tot_col] = pd.to_numeric(df[tot_col], errors="coerce")
+        has = df[df[tot_col].notna()]
+        q = int(has["STDR_YYQU_CD"].max())
+        asof = f"{q // 10}Q{q % 10}"
+        return has[has["STDR_YYQU_CD"] == q].set_index("TRDAR_CD"), asof
+
+    def dist(row, cols_labels, total) -> list | None:
+        if not total or total <= 0:
+            return None
+        out_ = []
+        for col, label in cols_labels:
+            v = num(row.get(col))
+            out_.append({"label": label, "ratio": round((v or 0) / total, 4)})
+        return out_
+
+    res, res_asof = latest_rows(res_p, "TOT_REPOP_CO")
+    wrk, wrk_asof = latest_rows(wrk_p, "TOT_WRC_POPLTN_CO")
+
+    by = doc["bySangwon"]
+    n_res = n_wrk = 0
+    codes = set(by) | {str(c) for c in res.index} | {str(c) for c in wrk.index}
+    for code in codes:
+        entry = by.setdefault(code, {})
+        icode = int(code)
+        if icode in res.index:
+            r = res.loc[icode]
+            total = num(r["TOT_REPOP_CO"])
+            entry["resident"] = {
+                "total": int(total) if total is not None else None,
+                "byGender": dist(r, [("ML_REPOP_CO", "남성"), ("FML_REPOP_CO", "여성")], total),
+                "byAge": dist(r, [(f"AGRDE_{a}_REPOP_CO", lb) for a, lb in AGE_LABELS], total),
+                "asOf": res_asof,
+            }
+            n_res += 1
+        else:
+            entry["resident"] = None
+        if icode in wrk.index:
+            w = wrk.loc[icode]
+            total = num(w["TOT_WRC_POPLTN_CO"])
+            entry["worker"] = {
+                "total": int(total) if total is not None else None,
+                "byAge": dist(w, [(f"AGRDE_{a}_WRC_POPLTN_CO", lb) for a, lb in AGE_LABELS], total),
+                "asOf": wrk_asof,
+            }
+            n_wrk += 1
+        else:
+            entry["worker"] = None
+
+    doc["asOf"]["resident"] = res_asof
+    doc["asOf"]["worker"] = wrk_asof
+    # 출처: 상주·직장만 모델 저장소 표기로 교체, 나머지는 유지
+    kept = [s for s in doc.get("sources", [])
+            if "상주인구" not in s and "직장인구" not in s]
+    doc["sources"] = [
+        f"서울 열린데이터광장 상권분석서비스 — 상주인구-상권 ({res_asof}, Commercial-AI-/data/raw API 수집본)",
+        f"서울 열린데이터광장 상권분석서비스 — 직장인구-상권 ({wrk_asof}, Commercial-AI-/data/raw API 수집본)",
+    ] + kept
+
+    write_json_gz(gz_path, doc)
+    return {"resident": n_res, "worker": n_wrk,
+            "asOf": f"{res_asof}/{wrk_asof}", "sangwons": len(by)}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--repo", default=DEFAULT_REPO)
@@ -436,8 +529,13 @@ def main() -> int:
         safety_by_gu = {}
         print(f"      ⚠️ 치안 생략 (data/raw/external/ 없음?): {e}")
 
+    # 배후지: 상주·직장인구 블록을 모델 저장소 CSV 로 교체 (rebuild_hinterland 주석 참조)
+    hint = rebuild_hinterland(repo, out)
+    hint_note = (f"배후지 상주 {hint['resident']:,}·직장 {hint['worker']:,} ({hint['asOf']})"
+                 if hint else "배후지 생략 (인구 CSV 미보유)")
+
     print(f"      업종 {len(inds)} · 상권 {len(sw)} · 폐업률 사전표 {len(ind_prior)}"
-          f" · 치안 자치구 {len(safety_by_gu)}")
+          f" · 치안 자치구 {len(safety_by_gu)} · {hint_note}")
 
     # ================= heatmap / analyze / by-sangwon =================
     print("[6/6] heatmap · analyze · by-sangwon 작성")
