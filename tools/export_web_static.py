@@ -168,6 +168,130 @@ def write_json_gz(path: str, obj) -> None:
             gz.write(payload)
 
 
+def load_safety_by_gu(repo: str, sv) -> tuple[dict, dict]:
+    """
+    자치구 치안 상세 + 안전점수 — **모델 저장소 데이터만** 사용한다 (2026-08-05 전환).
+
+    이전에는 웹이 별도 조달한 CSV(구 레포 경로, 지금은 없음)로 build_safety_scores.py 를
+    돌려 meta/safety-scores.json 을 만들었다. v2 에서 같은 원본이 모델 저장소
+    data/raw/external/ 에 커밋됐고 서빙 테이블에 모델 계산 점수(score_safety_gu)가
+    실려 있으므로, 여기서 함께 생성해 죽은 의존을 없앤다.
+
+    반환: (detail_by_gu, scores_meta)
+      detail_by_gu  — 상권 자치구명 → SafetyDetail(웹 계약 contracts.ts) 형태.
+                      analyze 레코드의 detail.safety 로 들어간다
+      scores_meta   — meta/safety-scores.json 전체 내용 (기존 스키마 유지,
+                      score 만 웹 재계산 → **모델 score_safety_gu** 로 교체)
+
+    ⚠️ arrestRate 는 검거/발생 원본비라 1.0 을 넘을 수 있다(다른 기간 사건 검거 포함).
+       '검거율'로 화면에 직접 표시하지 말 것 — 점수 성분·백분위 용도로만.
+    """
+    import glob
+
+    import pandas as pd
+
+    ext = os.path.join(repo, "data", "raw", "external")
+    crime = pd.read_csv(os.path.join(ext, "crime_gu.csv"), encoding="utf-8-sig")
+    year = int(crime["연도"].max())
+    crime = crime[crime["연도"] == year].set_index("자치구")
+
+    cctv = pd.read_csv(os.path.join(ext, "cctv_gu.csv"), encoding="utf-8-sig")
+    cctv_year = int(cctv["연도"].max())
+    cctv = cctv[cctv["연도"] == cctv_year].set_index("자치구")
+
+    # ---- 유형별 발생 건수 (다중 헤더 CSV: 행0=연도·행2=유형·행3=발생/검거, 데이터 행4~) ----
+    by_type: dict[str, list] = {}
+    paths = sorted(glob.glob(os.path.join(ext, "5대*범죄*발생현황*.csv")))
+    if paths:
+        raw = pd.read_csv(paths[0], encoding="utf-8-sig", header=None)
+        years_row, types_row, kind_row = raw.iloc[0], raw.iloc[2], raw.iloc[3]
+        cols = [i for i in range(2, raw.shape[1])
+                if str(years_row[i]) == str(year) and str(kind_row[i]) == "발생"
+                and str(types_row[i]) != "소계"]
+        label_map = {"강간·강제추행": "성범죄"}  # 기존 safety-scores.json 라벨과 통일
+
+        def cnt(v) -> int | None:
+            # 통계표의 '-' 는 발생 0건 표기다 (강북·도봉·서대문·구로 강도에서 실측 확인).
+            # 구판은 이 항목을 누락시켰는데, 0 으로 싣는 쪽이 정직하다.
+            s = str(v).strip()
+            if s == "-":
+                return 0
+            try:
+                return int(float(s))
+            except ValueError:
+                return None
+
+        for _, row in raw.iloc[4:].iterrows():
+            gu = str(row[1]).strip()
+            if gu in ("소계", "합계") or gu not in crime.index:
+                continue
+            entries = [
+                {"label": label_map.get(str(types_row[i]), str(types_row[i])), "count": c}
+                for i in cols
+                if pd.notna(row[i]) and (c := cnt(row[i])) is not None
+            ]
+            by_type[gu] = entries or None
+
+    # ---- 모델 점수 (서빙 테이블 — 자치구당 유일값임을 확인함) ----
+    model_score = sv.groupby("자치구_코드_명")["score_safety_gu"].first()
+
+    gus = sorted(crime.index)
+    seoul_avg = round(float(crime["범죄_발생_건수"].mean()), 1)
+    rank = crime["범죄_발생_건수"].rank(method="min").astype(int)  # 1 = 가장 적음
+
+    detail_by_gu: dict[str, dict] = {}
+    by_gu_scores: dict[str, dict] = {}
+    for gu in gus:
+        c = crime.loc[gu]
+        incidents = int(c["범죄_발생_건수"])
+        per100k = (round(incidents / c["인구"] * 100_000, 1) if c["인구"] > 0 else None)
+        detail_by_gu[gu] = {
+            "year": str(year),
+            "guName": gu,
+            "totalIncidents": incidents,
+            "byType": by_type.get(gu),
+            "rankAmongGus": int(rank[gu]),
+            "guCount": len(gus),
+            "seoulAvgIncidents": seoul_avg,
+            "per100k": per100k,
+            "granularity": "gu",
+        }
+        by_gu_scores[gu] = {
+            "crimeRatePer100k": per100k,
+            "arrestRate": (round(float(c["범죄_검거_건수"]) / incidents, 4)
+                           if incidents > 0 else None),
+            "cctvPerKm2": (round(float(cctv.loc[gu, "cctv_대수"])
+                                 / cctv.loc[gu, "자치구_면적_km2"], 1)
+                           if gu in cctv.index and cctv.loc[gu, "자치구_면적_km2"] > 0 else None),
+            "score": num(model_score.get(gu)),
+            "totalIncidents": incidents,
+            "byType": by_type.get(gu),
+            "rankAmongGus": int(rank[gu]),
+            "guCount": len(gus),
+            "seoulAvgIncidents": seoul_avg,
+        }
+
+    scores_meta = {
+        "year": str(year),
+        "cctvYear": str(cctv_year),
+        # 산식 정본 = 모델 config/scoring_weights.yaml 의 safety_score. 여기 적는 건 표기용
+        "weights": {"crimeRatePer100k": 0.5, "arrestRate": 0.25, "cctvPerKm2": 0.25},
+        "minComponents": 2,
+        "weightsNote": (
+            "안전점수 = 모델 파이프라인(Commercial-AI-) 이 계산한 score_safety_gu 를 그대로 사용 — "
+            "범죄율(10만명당, 낮을수록↑) 50% + 검거 비율 25% + CCTV 밀도 25% 의 자치구 간 "
+            "백분위 가중합(0~100). 가중치는 서비스 정책값이며 통계적으로 검증된 사실이 아닙니다."
+        ),
+        "sources": [
+            f"서울열린데이터광장/경찰청 5대범죄 발생·검거 ({year}, Commercial-AI-/data/raw/external/)",
+            f"서울시 자치구 CCTV 설치현황 ({cctv_year}, Commercial-AI-/data/raw/external/)",
+            "안전점수: Commercial-AI- 서빙 테이블 score_safety_gu (config/scoring_weights.yaml)",
+        ],
+        "byGu": by_gu_scores,
+    }
+    return detail_by_gu, scores_meta
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--repo", default=DEFAULT_REPO)
@@ -303,7 +427,17 @@ def main() -> int:
             "pseudoCount": SHRINKAGE_PSEUDO_COUNT,
             "quarterlyClosureRateByIndustry": {k: round(v, 8) for k, v in ind_prior.items()},
         }, f, ensure_ascii=False)
-    print(f"      업종 {len(inds)} · 상권 {len(sw)} · 폐업률 사전표 {len(ind_prior)}")
+    # 치안: 모델 저장소 원본 + 서빙 score_safety_gu → ⑥ 카드 상세 + 토글 점수 (한 소스)
+    try:
+        safety_by_gu, safety_scores_meta = load_safety_by_gu(repo, sv)
+        with open(os.path.join(out, "meta", "safety-scores.json"), "w", encoding="utf-8") as f:
+            json.dump(safety_scores_meta, f, ensure_ascii=False, indent=1)
+    except Exception as e:  # 원본 CSV 미보유 환경 — 치안 없이도 나머지는 내보낸다
+        safety_by_gu = {}
+        print(f"      ⚠️ 치안 생략 (data/raw/external/ 없음?): {e}")
+
+    print(f"      업종 {len(inds)} · 상권 {len(sw)} · 폐업률 사전표 {len(ind_prior)}"
+          f" · 치안 자치구 {len(safety_by_gu)}")
 
     # ================= heatmap / analyze / by-sangwon =================
     print("[6/6] heatmap · analyze · by-sangwon 작성")
@@ -399,7 +533,8 @@ def main() -> int:
                         },
                         "note": "점포 수는 유사업종 전체 점포 기준(프랜차이즈 포함)입니다.",
                     },
-                    "safety": None,  # 자치구 범죄 CSV 미보유 → 웹이 '예시 데이터'로 표시
+                    # 모델 저장소 원본(자치구 범죄·CCTV) 기준 — load_safety_by_gu() 주석 참조
+                    "safety": safety_by_gu.get(r.자치구_코드_명),
                 }
 
             records[str(code)] = {

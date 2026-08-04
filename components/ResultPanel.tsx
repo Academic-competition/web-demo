@@ -901,7 +901,7 @@ export default function ResultPanel({
         </Section>
       )}
 
-      {/* ── ⑥ 치안 참고 — 자치구 5대 범죄 (기회점수 미반영) ── */}
+      {/* ── ⑥ 치안 참고 — 자치구 5대 범죄 (기회점수에 5% 반영 · 매출 예측 피처는 아님) ── */}
       {(() => {
         // 실측 우선순위: 서빙 detail.safety → /api/safety 실데이터 → 예시(목업)
         const real = detail?.safety ?? safetyFromScores ?? null;
@@ -1023,8 +1023,9 @@ export default function ResultPanel({
             )}
             <p className="mt-3 text-[9.5px] leading-relaxed text-faint">
               자치구 단위 통계로 상권·골목별 차이는 반영되지 않으며, 체감 치안과 다를 수
-              있습니다. 이 지표는 참고용으로만 제공되고{" "}
-              <b className="text-muted">창업기회점수에는 반영되지 않습니다</b>.
+              있습니다. 안전점수는{" "}
+              <b className="text-muted">기회점수(종합진단)에 5% 가중으로 반영</b>되지만, 매출
+              예측 모델의 학습 피처는 아닙니다(검증에서 성능 기여가 없어 제외).
             </p>
           </Section>
         );

@@ -146,7 +146,15 @@ export function provenanceOf(
   }
 
   // ── 외부 데이터 (별도 API) ─────────────────────────────────
-  if (extra?.safety) {
+  if (d?.safety) {
+    // 서빙 산출물에 실린 치안 상세 — ResultPanel 의 1순위 소스와 동일한 판정
+    rows.push({
+      block: "⑥ 치안",
+      kind: "measured",
+      how: `경찰청 5대 범죄 실측 (${d.safety.year}년 · ${d.safety.granularity === "gu" ? "자치구 단위" : d.safety.granularity}) — 모델 저장소 원본`,
+      from: "detail.safety",
+    });
+  } else if (extra?.safety) {
     rows.push({
       block: "⑥ 치안",
       kind: extra.safety === "mock" ? "example" : "measured",

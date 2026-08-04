@@ -177,9 +177,13 @@ Commercial-AI-/.venv/Scripts/python.exe sanggwon-web/tools/build_safety_scores.p
 - 검거 수치는 발생을 초과할 수 있다 (종로구 1.17). 다른 기간 사건 검거·검거 인원 집계 때문이며
   원본 그대로 백분위에만 쓴다 — **'검거율'로 화면에 직접 표시하지 말 것**
 - 자동 수집은 미구현 (`Commercial-AI-/scripts/collect_data.py:10`) — CSV 수동 다운로드
-- 남은 것: **서빙 파이프라인 쪽 `detail.safety` 는 여전히 `null`** 이다. 정본 설계
-  (`attach_safety()`)로 서빙 테이블에 조인하려면 `crime_gu.csv`/`cctv_gu.csv` 스키마로
-  변환이 필요하다. 현재 웹은 `/api/safety` → 화면 계층 매칭으로 동작하며 이것으로 충분하다
+- ✅ **2026-08-05 모델 소스로 전환 완료** — `build_safety_scores.py` 의 입력(구 레포 경로)이
+  이 머신에 없어 재생성 불가였던 것을, `export_web_static.py` 의 `load_safety_by_gu()` 가
+  **모델 저장소 `data/raw/external/` 원본 + 서빙 `score_safety_gu`(모델 계산 점수)** 로
+  `safety-scores.json` 과 `detail.safety`(⑥ 카드 상세)를 함께 생성하도록 통합했다.
+  점수는 웹 재계산 → 모델값으로 교체 (같은 산식, 평균 1.5점·최대 7점 차).
+  구판이 누락하던 강도 0건(`-` 표기)도 이제 0 으로 싣는다.
+  `build_safety_scores.py` 는 역사 기록으로만 남는다 — 다시 쓰지 말 것
 
 **관련 파일**: `tools/build_safety_scores.py`, `lib/normalize.ts` 의 `safetyScores()`,
 `app/api/safety/route.ts`, `app/page.tsx` 의 `safetyFromScores`/`extraSources`
