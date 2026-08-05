@@ -107,6 +107,22 @@ export function provenanceOf(
       from: `revenue.accuracy (n=${result.revenue.accuracy.sampleN ?? "?"})`,
     });
   }
+  if (result.diagnosis) {
+    rows.push({
+      block: "① 모델 종합진단",
+      kind: "stat",
+      how: `업종 내 백분위 성분의 정책 가중합 ${result.diagnosis.overallScore.toFixed(0)}점${result.diagnosis.grade ? ` (${result.diagnosis.grade})` : ""} — 가중치는 파일에 실려 온 서비스 정책값`,
+      from: `diagnosis.overallScore · components ${result.diagnosis.components?.length ?? 0}개`,
+    });
+  }
+  if (result.context?.density) {
+    rows.push({
+      block: "⑤ 인구 밀도",
+      kind: "stat",
+      how: "실측 인구 ÷ 상권 영역 면적(명/km²) 단순 환산",
+      from: "context.density (영역_면적 기준)",
+    });
+  }
   if (result.detail?.independent) {
     const ind = result.detail.independent;
     rows.push({
@@ -186,6 +202,14 @@ export function provenanceOf(
       from: `/api/safety sourceMode=${extra.safety}`,
     });
   }
+  if (result.detail?.realEstate) {
+    rows.push({
+      block: "⑦ 임대 시세",
+      kind: "measured",
+      how: `R-ONE 소규모 상가 임대동향 — ${result.detail.realEstate.joinMethod === "gu_mean" ? "자치구 평균값 조인 (상권 단위 실측 아님)" : `조인: ${result.detail.realEstate.joinMethod ?? "?"}`}`,
+      from: `detail.realEstate.joinMethod="${result.detail.realEstate.joinMethod ?? "?"}"`,
+    });
+  }
   if (extra?.hinterland) {
     rows.push({
       block: "⑦ 배후지",
@@ -222,6 +246,14 @@ export function provenanceOf(
       kind: "rule",
       how: "생존율 문턱값 판정 (safe ≥ 0.60 / caution ≥ 0.45) — 웹 서버가 주입",
       from: `survival.grade="${result.survival.grade}" (gradeOf)`,
+    });
+  }
+  if (result.diagnosis?.strengths?.length || result.diagnosis?.risks?.length) {
+    rows.push({
+      block: "① 강점·리스크",
+      kind: "rule",
+      how: "지표 문턱값 조건에 걸린 항목을 문장 템플릿으로 나열 (모델 저장소 진단 규칙)",
+      from: `diagnosis.strengths ${result.diagnosis.strengths?.length ?? 0} · risks ${result.diagnosis.risks?.length ?? 0}`,
     });
   }
   if (result.narrative) {

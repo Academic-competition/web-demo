@@ -71,6 +71,11 @@ export const RevenueAccuracy = z.object({
   sampleN: z.number().nullable(),
   /** 표본이 적어 오차 추정 자체가 불안정한 업종 */
   lowSample: z.boolean(),
+  /** v2 확장 — 이 상권의 유형(직장형 등)에서의 test 오차 (이중 신뢰도) */
+  typeLabel: z.string().nullable().optional(),
+  typeSmapePct: z.number().nullable().optional(),
+  typeSampleN: z.number().nullable().optional(),
+  typeLowSample: z.boolean().nullable().optional(),
 });
 export type RevenueAccuracy = z.infer<typeof RevenueAccuracy>;
 
@@ -97,6 +102,35 @@ export const RevenuePayload = z.object({
 });
 export type RevenuePayload = z.infer<typeof RevenuePayload>;
 
+/**
+ * v2 신규 — 종합진단 분해 (모델 저장소 diagnosis.py 산출).
+ * 성분은 전부 '동일 업종 내 백분위(0~100)'. 종합 = Σ가점 − Σ감점 재척도.
+ * 가중치·note 는 export 가 scoring_weights.yaml 에서 읽어 담는다 (웹 하드코딩 금지 — 산식 분산 방지).
+ * ML 예측이 아니라 규칙·통계다. 웹 신호등(생존율 기반)과 별개 지표 — UI 는 "모델 종합진단"으로 구분 표기.
+ */
+export const DiagnosisPayload = z.object({
+  overallScore: z.number(),
+  /** A+ ~ C (grade_bins 정책) */
+  grade: z.string().nullable(),
+  components: z
+    .array(
+      z.object({
+        key: z.string(),
+        label: z.string(),
+        /** 동일 업종 내 백분위 0~100 */
+        score: z.number(),
+        /** 정책 가중치 (파일이 실어 보냄) */
+        weight: z.number(),
+        direction: z.enum(["positive", "negative"]),
+      })
+    )
+    .nullable(),
+  strengths: z.array(z.string()).nullable(),
+  risks: z.array(z.string()).nullable(),
+  note: z.string().nullable(),
+});
+export type DiagnosisPayload = z.infer<typeof DiagnosisPayload>;
+
 export const ContextPayload = z.object({
   footTraffic: z
     .object({
@@ -105,6 +139,16 @@ export const ContextPayload = z.object({
       saturday: z.number().nullable(),
     })
     .nullable(),
+  /** v2 신규 — 인구 밀도 (명/km², 상권 영역 면적 기준 단순 환산). 구 번들엔 없음 */
+  density: z
+    .object({
+      footTrafficPerKm2: z.number().nullable(),
+      residentPerKm2: z.number().nullable(),
+      workerPerKm2: z.number().nullable(),
+      areaKm2: z.number().nullable(),
+    })
+    .nullable()
+    .optional(),
   competition: z
     .object({
       storeCount: z.number().nullable(),
@@ -351,6 +395,24 @@ export const IndependentDetail = z.object({
 });
 export type IndependentDetail = z.infer<typeof IndependentDetail>;
 
+/**
+ * v2 신규 — R-ONE 임대 지표. ⚠️ 자치구 평균(gu_mean) 조인이라 상권 단위 실측이 아니다 —
+ * UI 는 반드시 basis 문구를 함께 표기할 것.
+ */
+export const RealEstateDetail = z.object({
+  /** 원/m² (소규모 상가 임대료) */
+  rentPerM2KRW: z.number(),
+  /** 공실률 0~1 */
+  vacancyRate: z.number().nullable(),
+  /** 임대가격지수 (기준 100) */
+  rentIndex: z.number().nullable(),
+  /** 지수 전년비 (0.006 = +0.6%) */
+  rentIndexYoy: z.number().nullable(),
+  joinMethod: z.string().nullable(),
+  basis: z.string(),
+});
+export type RealEstateDetail = z.infer<typeof RealEstateDetail>;
+
 export const AnalyzeDetail = z.object({
   sales: SalesDetail.nullable(),
   store: StoreDetail.nullable(),
@@ -360,6 +422,8 @@ export const AnalyzeDetail = z.object({
   safety: SafetyDetail.nullable().optional(),
   /** v2 신규 — 구 번들에는 없음 (UI 는 있을 때만 카드 렌더) */
   independent: IndependentDetail.nullable().optional(),
+  /** v2 신규 — R-ONE 임대 지표 (자치구 평균 조인) */
+  realEstate: RealEstateDetail.nullable().optional(),
 });
 export type AnalyzeDetail = z.infer<typeof AnalyzeDetail>;
 
@@ -384,6 +448,8 @@ export const AnalyzeResult = z.object({
   narrative: z
     .object({ summary: z.string(), generator: z.string() })
     .nullable(),
+  /** v2 신규 — 종합진단 분해 (구 번들·라이브·목업엔 없음) */
+  diagnosis: DiagnosisPayload.nullable().optional(),
   /** 상세 분석 (실측 원천값) — 목업 폴백에는 없을 수 있음 */
   detail: AnalyzeDetail.nullable().optional(),
   meta: z.object({

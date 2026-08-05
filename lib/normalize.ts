@@ -547,6 +547,21 @@ function packDetail(raw: any): AnalyzeResult["detail"] {
           granularity: String(raw.safety.granularity ?? "gu"),
         }
       : null,
+    // v2 신규 — R-ONE 임대 지표 (자치구 평균 조인)
+    realEstate:
+      raw.realEstate && raw.realEstate.rentPerM2KRW != null
+        ? {
+            rentPerM2KRW: Number(raw.realEstate.rentPerM2KRW),
+            vacancyRate: num(raw.realEstate.vacancyRate),
+            rentIndex: num(raw.realEstate.rentIndex),
+            rentIndexYoy: num(raw.realEstate.rentIndexYoy),
+            joinMethod:
+              typeof raw.realEstate.joinMethod === "string"
+                ? raw.realEstate.joinMethod
+                : null,
+            basis: String(raw.realEstate.basis ?? "R-ONE 임대동향"),
+          }
+        : null,
     // v2 신규 — 독립점포 관점 매출 (통계 추정). 구 번들엔 없으므로 optional 통과
     independent:
       raw.independent &&
@@ -644,7 +659,7 @@ function normalizeAnalyze(
             raw.revenue.percentileAmongSangwons != null
               ? Number(raw.revenue.percentileAmongSangwons)
               : null,
-          // v2 신규 — 업종별 test 오차(채점 결과). 없으면 신뢰도 표기 생략
+          // v2 신규 — 업종별(+상권유형별) test 오차(채점 결과). 없으면 신뢰도 표기 생략
           accuracy:
             raw.revenue.accuracy &&
             Number.isFinite(Number(raw.revenue.accuracy.smapePct))
@@ -655,6 +670,22 @@ function normalizeAnalyze(
                       ? Number(raw.revenue.accuracy.sampleN)
                       : null,
                   lowSample: Boolean(raw.revenue.accuracy.lowSample),
+                  typeLabel:
+                    typeof raw.revenue.accuracy.typeLabel === "string"
+                      ? raw.revenue.accuracy.typeLabel
+                      : null,
+                  typeSmapePct:
+                    raw.revenue.accuracy.typeSmapePct != null
+                      ? Number(raw.revenue.accuracy.typeSmapePct)
+                      : null,
+                  typeSampleN:
+                    raw.revenue.accuracy.typeSampleN != null
+                      ? Number(raw.revenue.accuracy.typeSampleN)
+                      : null,
+                  typeLowSample:
+                    raw.revenue.accuracy.typeLowSample != null
+                      ? Boolean(raw.revenue.accuracy.typeLowSample)
+                      : null,
                 }
               : null,
           disclaimer: REVENUE_DISCLAIMER, // 모델 응답과 무관하게 강제 주입
@@ -676,6 +707,27 @@ function normalizeAnalyze(
                 total: Number(raw.context.footTraffic.total ?? 0),
                 friday: raw.context.footTraffic.friday ?? null,
                 saturday: raw.context.footTraffic.saturday ?? null,
+              }
+            : null,
+          // v2 신규 — 인구 밀도 3종 (명/km²)
+          density: raw.context.density
+            ? {
+                footTrafficPerKm2:
+                  raw.context.density.footTrafficPerKm2 != null
+                    ? Number(raw.context.density.footTrafficPerKm2)
+                    : null,
+                residentPerKm2:
+                  raw.context.density.residentPerKm2 != null
+                    ? Number(raw.context.density.residentPerKm2)
+                    : null,
+                workerPerKm2:
+                  raw.context.density.workerPerKm2 != null
+                    ? Number(raw.context.density.workerPerKm2)
+                    : null,
+                areaKm2:
+                  raw.context.density.areaKm2 != null
+                    ? Number(raw.context.density.areaKm2)
+                    : null,
               }
             : null,
           competition: raw.context.competition
@@ -706,6 +758,39 @@ function normalizeAnalyze(
           generator: String(raw.narrative.generator ?? "unknown"),
         }
       : null,
+    // v2 신규 — 종합진단 분해 (가중치·note 는 파일이 실어 보낸 값 그대로)
+    diagnosis:
+      raw?.diagnosis && Number.isFinite(Number(raw.diagnosis.overallScore))
+        ? {
+            overallScore: Number(raw.diagnosis.overallScore),
+            grade:
+              typeof raw.diagnosis.grade === "string" ? raw.diagnosis.grade : null,
+            components: Array.isArray(raw.diagnosis.components)
+              ? raw.diagnosis.components
+                  .filter(
+                    (c: any) =>
+                      c &&
+                      Number.isFinite(Number(c.score)) &&
+                      (c.direction === "positive" || c.direction === "negative")
+                  )
+                  .map((c: any) => ({
+                    key: String(c.key),
+                    label: String(c.label),
+                    score: Number(c.score),
+                    weight: Number(c.weight ?? 0),
+                    direction: c.direction as "positive" | "negative",
+                  }))
+              : null,
+            strengths: Array.isArray(raw.diagnosis.strengths)
+              ? raw.diagnosis.strengths.map(String)
+              : null,
+            risks: Array.isArray(raw.diagnosis.risks)
+              ? raw.diagnosis.risks.map(String)
+              : null,
+            note:
+              typeof raw.diagnosis.note === "string" ? raw.diagnosis.note : null,
+          }
+        : null,
     detail: packDetail(raw?.detail),
     meta,
     debug: trace,

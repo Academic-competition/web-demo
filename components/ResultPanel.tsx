@@ -622,6 +622,87 @@ export default function ResultPanel({
             </span>
           </p>
         )}
+
+        {/* v2 신규 — 모델 종합진단 분해 (계보 '① 종합진단 점수'·'① 강점·리스크' 행).
+            웹 신호등(생존율 기반)과 별개 지표라 라벨로 구분한다 */}
+        {result.diagnosis && (
+          <div className="mt-3 rounded-lg border border-line/60 bg-ink-700/40 px-3 py-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                <span className="rounded border border-line bg-ink-700/60 px-1.5 py-px text-[9px] font-medium text-muted">
+                  모델 종합진단
+                </span>
+                <span className="text-[9.5px] text-faint">업종 내 백분위 기반 · 신호등(생존율)과 별개</span>
+              </div>
+              <div className="shrink-0 text-right">
+                <b className="text-lg text-fg" style={{ fontFamily: "var(--font-numeric)" }}>
+                  {result.diagnosis.overallScore.toFixed(0)}
+                </b>
+                <span className="text-[10px] text-faint">/100</span>
+                {result.diagnosis.grade && (
+                  <span className="ml-1.5 rounded border border-gold/40 bg-gold/10 px-1.5 py-px text-[10px] font-semibold text-gold-soft">
+                    {result.diagnosis.grade}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {result.diagnosis.components && result.diagnosis.components.length > 0 && (
+              <div className="mt-2 grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2">
+                {(["positive", "negative"] as const).map((dir) => (
+                  <div key={dir}>
+                    <div className="mb-0.5 text-[9px] text-faint">
+                      {dir === "positive" ? "가점 성분 (높을수록 유리)" : "감점 성분 (높을수록 불리)"}
+                    </div>
+                    {result.diagnosis!.components!
+                      .filter((c) => c.direction === dir)
+                      .map((c) => (
+                        <div key={c.key} className="flex items-center gap-1.5 py-px">
+                          <span className="w-[88px] shrink-0 truncate text-[9.5px] text-muted" title={c.label}>
+                            {c.label}
+                          </span>
+                          <div className="h-1 flex-1 overflow-hidden rounded-full bg-ink-600/70">
+                            <div
+                              className={`h-full rounded-full ${dir === "positive" ? "bg-gold/70" : "bg-risk/60"}`}
+                              style={{ width: `${Math.min(100, Math.max(0, c.score))}%` }}
+                            />
+                          </div>
+                          <span
+                            className="w-7 shrink-0 text-right text-[9.5px] text-fg/80"
+                            style={{ fontFamily: "var(--font-numeric)" }}
+                          >
+                            {c.score.toFixed(0)}
+                          </span>
+                          <span className="w-9 shrink-0 text-[8.5px] text-faint">×{c.weight.toFixed(2)}</span>
+                        </div>
+                      ))}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {(result.diagnosis.strengths?.length || result.diagnosis.risks?.length) ? (
+              <div className="mt-2 space-y-0.5 border-t border-line/40 pt-1.5">
+                {result.diagnosis.strengths?.map((s) => (
+                  <div key={s} className="text-[10px] leading-relaxed text-muted">
+                    <span className="mr-1 text-safe">▲</span>
+                    {s}
+                  </div>
+                ))}
+                {result.diagnosis.risks?.map((s) => (
+                  <div key={s} className="text-[10px] leading-relaxed text-muted">
+                    <span className="mr-1 text-risk">▼</span>
+                    {s}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
+            {result.diagnosis.note && (
+              <p className="mt-1.5 text-[9px] leading-relaxed text-faint">{result.diagnosis.note}</p>
+            )}
+          </div>
+        )}
       </Section>
 
       {/* ── ② 생존 전망 ─────────────────────────────────── */}
@@ -698,7 +779,19 @@ export default function ResultPanel({
                   {" "}· <span className="text-caution">표본이 적어 오차 추정 자체가 불안정한 업종입니다</span>
                 </>
               )}
-              . 모델 성적표의 업종별 채점 결과를 그대로 표시합니다.
+              {/* v2 확장 — 상권 유형별 오차 (이중 신뢰도) */}
+              {result.revenue.accuracy.typeSmapePct != null && result.revenue.accuracy.typeLabel && (
+                <>
+                  {" "}· 이 상권 유형({result.revenue.accuracy.typeLabel})에서는 평균{" "}
+                  <b className="text-muted" style={{ fontFamily: "var(--font-numeric)" }}>
+                    ±{result.revenue.accuracy.typeSmapePct.toFixed(1)}%
+                  </b>
+                  {result.revenue.accuracy.typeLowSample && (
+                    <span className="text-caution"> (표본 적음)</span>
+                  )}
+                </>
+              )}
+              . 모델 성적표의 채점 결과를 그대로 표시합니다.
             </p>
           )}
 
@@ -1051,6 +1144,44 @@ export default function ResultPanel({
               <DemographicsChart data={result.context.demographics} />
             </SubBlock>
           )}
+
+          {/* v2 신규 — 인구 밀도 (실측 ÷ 상권 면적, 계보 '⑤ 인구 밀도' 행) */}
+          {result.context?.density &&
+            (result.context.density.footTrafficPerKm2 != null ||
+              result.context.density.residentPerKm2 != null ||
+              result.context.density.workerPerKm2 != null) && (
+              <SubBlock
+                title="인구 밀도"
+                aside={
+                  <>
+                    명/km²
+                    {result.context.density.areaKm2 != null && (
+                      <> · 상권 면적 {result.context.density.areaKm2.toFixed(2)}km² 기준</>
+                    )}
+                  </>
+                }
+              >
+                <div className="grid grid-cols-3 gap-2">
+                  {(
+                    [
+                      ["유동 (분기)", result.context.density.footTrafficPerKm2],
+                      ["상주", result.context.density.residentPerKm2],
+                      ["직장", result.context.density.workerPerKm2],
+                    ] as const
+                  ).map(([label, v]) => (
+                    <div key={label} className="rounded-lg bg-ink-700/50 px-3 py-2">
+                      <div className="text-[10px] text-faint">{label}</div>
+                      <div
+                        className="mt-0.5 text-sm font-semibold text-fg"
+                        style={{ fontFamily: "var(--font-numeric)" }}
+                      >
+                        {v != null ? formatPeopleCompact(v) : "―"}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </SubBlock>
+            )}
         </Section>
       )}
 
@@ -1188,6 +1319,43 @@ export default function ResultPanel({
       {(() => {
         const h = hinterland?.hinterland ?? null;
         const isMock = !hinterland || hinterland.sourceMode === "mock" || !h;
+        // v2 신규 — R-ONE 임대 지표 (analyze detail 소스라 배후지 유무와 무관하게 렌더.
+        //           자치구 평균 조인 — 계보 '⑦ 임대 시세' 행)
+        const rentBlock = detail?.realEstate ? (
+          <SubBlock title="임대 시세 (자치구 평균)" aside="한국부동산원 R-ONE · 소규모 상가">
+            <div className="grid grid-cols-3 gap-2">
+              <div className="rounded-lg bg-ink-700/50 px-3 py-2">
+                <div className="text-[10px] text-faint">임대료 (m²당)</div>
+                <div className="mt-0.5 text-sm font-semibold text-fg" style={{ fontFamily: "var(--font-numeric)" }}>
+                  {Math.round(detail.realEstate.rentPerM2KRW).toLocaleString()}원
+                </div>
+              </div>
+              <div className="rounded-lg bg-ink-700/50 px-3 py-2">
+                <div className="text-[10px] text-faint">공실률</div>
+                <div className="mt-0.5 text-sm font-semibold text-fg" style={{ fontFamily: "var(--font-numeric)" }}>
+                  {detail.realEstate.vacancyRate != null
+                    ? `${(detail.realEstate.vacancyRate * 100).toFixed(1)}%`
+                    : "―"}
+                </div>
+              </div>
+              <div className="rounded-lg bg-ink-700/50 px-3 py-2">
+                <div className="text-[10px] text-faint">임대가격지수</div>
+                <div className="mt-0.5 text-sm font-semibold text-fg" style={{ fontFamily: "var(--font-numeric)" }}>
+                  {detail.realEstate.rentIndex != null ? detail.realEstate.rentIndex.toFixed(1) : "―"}
+                  {detail.realEstate.rentIndexYoy != null && (
+                    <span
+                      className={`ml-1 text-[10px] ${detail.realEstate.rentIndexYoy >= 0 ? "text-risk" : "text-safe"}`}
+                    >
+                      {detail.realEstate.rentIndexYoy >= 0 ? "▲" : "▼"}
+                      {Math.abs(detail.realEstate.rentIndexYoy * 100).toFixed(1)}%
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+            <p className="mt-1.5 text-[9.5px] leading-relaxed text-faint">{detail.realEstate.basis}</p>
+          </SubBlock>
+        ) : null;
         if (isMock) {
           return (
             <Section n={7} title="배후지 분석" aside="주거·직장·시설">
@@ -1195,6 +1363,7 @@ export default function ResultPanel({
                 ⚠ 배후지 데이터 없음 — 이 상권의 상주·직장인구 등이 원본 데이터셋에 없거나
                 산출물이 준비되지 않았습니다. 없는 값을 예시로 채우지 않습니다.
               </div>
+              {rentBlock}
             </Section>
           );
         }
@@ -1312,19 +1481,28 @@ export default function ResultPanel({
               </SubBlock>
             )}
 
-            {/* 데이터셋에 없어 뺀 항목 — 왜 없는지 밝힌다 (빈칸을 목업으로 채우지 않음) */}
-            {hinterland.unavailable.length > 0 && (
-              <div className="mt-3 border-t border-line/50 pt-2">
-                <div className="mb-1 text-[10px] text-faint">제공하지 않는 항목</div>
-                <ul className="space-y-0.5">
-                  {hinterland.unavailable.map((u: { item: string; reason: string }) => (
-                    <li key={u.item} className="text-[9.5px] leading-relaxed text-faint">
-                      · <b className="text-muted">{u.item}</b> — {u.reason}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            {/* v2 신규 — R-ONE 임대 지표 (rentBlock 은 배후지 유무 양쪽 분기에서 렌더) */}
+            {rentBlock}
+
+            {/* 데이터셋에 없어 뺀 항목 — 왜 없는지 밝힌다 (빈칸을 목업으로 채우지 않음).
+                임대시세는 detail.realEstate 가 생기면 목록에서 제외 (자치구 평균으로 제공 시작) */}
+            {(() => {
+              const unavailable = hinterland.unavailable.filter(
+                (u: { item: string }) => !(detail?.realEstate && u.item.includes("임대"))
+              );
+              return unavailable.length > 0 ? (
+                <div className="mt-3 border-t border-line/50 pt-2">
+                  <div className="mb-1 text-[10px] text-faint">제공하지 않는 항목</div>
+                  <ul className="space-y-0.5">
+                    {unavailable.map((u: { item: string; reason: string }) => (
+                      <li key={u.item} className="text-[9.5px] leading-relaxed text-faint">
+                        · <b className="text-muted">{u.item}</b> — {u.reason}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null;
+            })()}
           </Section>
         );
       })()}

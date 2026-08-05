@@ -429,6 +429,111 @@ def main() -> int:
     else:
         print("      ⚠️ model_metadata.json 없음 — revenue.accuracy 생략")
 
+    # ---- 상권유형별 예측 오차 (이중 신뢰도: "이 업종 ±a% · 이 유형 상권 ±b%") ----
+    acc_by_type: dict[str, dict] = {}
+    if os.path.exists(meta_p):
+        for a in (mmeta.get("test_breakdown", {}) or {}).get("by_commercial_type") or []:
+            nm = a.get("상권_유형")
+            if nm and a.get("SMAPE") is not None:
+                acc_by_type[nm] = {
+                    "typeLabel": nm,
+                    "typeSmapePct": round(float(a["SMAPE"]), 1),
+                    "typeSampleN": int(a["n"]) if a.get("n") is not None else None,
+                    "typeLowSample": bool(a.get("low_sample", False)),
+                }
+
+    # ---- 종합진단 가중치 — scoring_weights.yaml 이 유일한 정본 (산식 분산 금지) ----
+    # 성분 점수는 전부 '동일 업종 내 백분위(0~100)'. overall = Σ가점 − Σ감점 을 0~100 재척도.
+    # config 키 → (서빙 컬럼, 한글 라벨)
+    _COMP_MAP = {
+        "sales_potential_score": ("sales_potential_score", "매출 잠재력"),
+        "growth_score": ("growth_score", "성장성"),
+        "demand_score": ("demand_score", "수요(유동 밀도)"),
+        "competition_score": ("competition_score", "경쟁 여유도"),
+        "safety_score": ("score_safety_gu", "자치구 안전"),
+        "closure_risk_score": ("closure_risk_score", "폐업 위험"),
+        "rent_burden_score": ("score_rent_burden", "임대료 부담"),
+        "vacancy_risk_score": ("score_vacancy_risk", "공실 위험"),
+        "price_rise_risk_score": ("score_price_rise_risk", "임대료 상승 위험"),
+    }
+    diag_components: list[tuple[str, str, str, float, str]] = []  # (col, key, label, weight, direction)
+    diag_note = None
+    weights_p = os.path.join(repo, "config", "scoring_weights.yaml")
+    if os.path.exists(weights_p):
+        try:
+            import yaml
+            with open(weights_p, encoding="utf-8") as f:
+                wcfg = yaml.safe_load(f)
+            od = wcfg.get("overall_diagnosis", {})
+            for direction in ("positive", "negative"):
+                for key, w in (od.get(direction) or {}).items():
+                    if key in _COMP_MAP:
+                        col, label = _COMP_MAP[key]
+                        diag_components.append((col, key, label, float(w), direction))
+            diag_note = ("성분은 동일 업종 내 백분위(0~100)이며, 종합점수는 가점 합 − 감점 합을 "
+                         "0~100으로 재척도한 값입니다. 가중치는 서비스 정책값(scoring_weights.yaml)으로 "
+                         "통계적으로 검증된 사실이 아닙니다.")
+            print(f"      종합진단 성분 {len(diag_components)}개 로드 (scoring_weights.yaml)")
+        except Exception as e:
+            print(f"      ⚠️ scoring_weights.yaml 로드 실패 — diagnosis 성분 생략: {e}")
+
+    def _json_list(v) -> list | None:
+        if isinstance(v, str) and v.startswith("["):
+            try:
+                out_ = json.loads(v)
+                return [str(x) for x in out_] if isinstance(out_, list) else None
+            except json.JSONDecodeError:
+                return None
+        return None
+
+    def diagnosis_block(r) -> dict | None:
+        """서빙 종합진단 → 리포트 ① 점수 분해 카드. 규칙·통계이며 ML 예측이 아니다."""
+        overall = num(getattr(r, "overall_score", None))
+        if overall is None:
+            return None
+        comps = []
+        for col, key, label, w, direction in diag_components:
+            s = num(getattr(r, col, None))
+            if s is not None:
+                comps.append({"key": key, "label": label, "score": round(s, 1),
+                              "weight": w, "direction": direction})
+        return {
+            "overallScore": round(overall, 1),
+            "grade": (r.grade if isinstance(r.grade, str) else None),
+            "components": comps or None,
+            "strengths": _json_list(getattr(r, "strengths", None)),
+            "risks": _json_list(getattr(r, "risks", None)),
+            "note": diag_note,
+        }
+
+    def density_block(r) -> dict | None:
+        """인구 밀도 3종 (명/km², 상권 영역 면적 기준) — 실측 ÷ 면적 단순 환산."""
+        vals = {
+            "footTrafficPerKm2": num(getattr(r, "foot_traffic_density_km2", None)),
+            "residentPerKm2": num(getattr(r, "resident_density_km2", None)),
+            "workerPerKm2": num(getattr(r, "worker_density_km2", None)),
+        }
+        if all(v is None for v in vals.values()):
+            return None
+        area = num(getattr(r, "영역_면적", None))
+        vals["areaKm2"] = round(area / 1_000_000, 4) if area else None
+        return vals
+
+    def realestate_block(r) -> dict | None:
+        """R-ONE 임대 지표 — 자치구 평균(gu_mean) 조인. 상권 단위 실측이 아님을 캡션에 명시."""
+        rent = num(getattr(r, "re_rent_per_m2", None))
+        if rent is None:
+            return None
+        method = getattr(r, "re_join_method", None)
+        return {
+            "rentPerM2KRW": rent,
+            "vacancyRate": num(getattr(r, "re_vacancy_rate", None)),        # 0~1
+            "rentIndex": num(getattr(r, "re_rent_index", None)),            # 기준 100
+            "rentIndexYoy": num(getattr(r, "re_rent_index_yoy", None)),     # 비율 (0.006 = +0.6%)
+            "joinMethod": method if isinstance(method, str) else None,
+            "basis": "한국부동산원 R-ONE 소규모 상가 임대동향 — 자치구 평균값 조인 (상권 단위 실측 아님)",
+        }
+
     def independent_block(r) -> dict | None:
         """서빙 indep_* → detail.independent (독립점포 관점 매출 — 통계 추정, ML 예측 아님).
 
@@ -692,6 +797,8 @@ def main() -> int:
                     "safety": safety_by_gu.get(r.자치구_코드_명),
                     # 독립점포 관점 매출 (v2 신규, 통계 추정) — independent_block() 주석 참조
                     "independent": independent_block(r),
+                    # v2 신규: R-ONE 임대 지표 (자치구 평균 조인 — realestate_block() 주석 참조)
+                    "realEstate": realestate_block(r),
                 }
 
             records[str(code)] = {
@@ -713,8 +820,11 @@ def main() -> int:
                 "revenue": ({"monthlyEstimateKRW": pred,
                              "percentileAmongSangwons": num(r.sales_percentile),
                              "basis": "per_store_predicted",
-                             # v2 신규: 이 업종에서 모델이 test 에서 평균 몇 % 틀렸는지 (채점 결과)
-                             "accuracy": acc_by_industry.get(ind_name)}
+                             # v2 신규: 업종별 + 상권유형별 test 오차 (채점 결과, 이중 신뢰도)
+                             "accuracy": ({**acc_by_industry.get(ind_name, {}),
+                                           **(acc_by_type.get(r.상권_유형, {})
+                                              if isinstance(r.상권_유형, str) else {})}
+                                          or None) if acc_by_industry.get(ind_name) else None}
                             if ok and pred is not None else None),
                 "context": ({
                     "footTraffic": {
@@ -731,9 +841,13 @@ def main() -> int:
                     "demographics": [{"ageBand": k, "ratio": v} for k, v in
                                      json.loads(r.age_distribution).items()]
                     if isinstance(r.age_distribution, str) else [],
+                    # v2 신규: 인구 밀도 3종 (명/km², 상권 영역 기준)
+                    "density": density_block(r),
                 } if ok else None),
                 "narrative": ({"summary": r.recommendation, "generator": "rule_based"}
                               if ok and isinstance(r.recommendation, str) else None),
+                # v2 신규: 종합진단 분해 (점수 성분·등급·강점/리스크) — diagnosis_block() 주석 참조
+                "diagnosis": (diagnosis_block(r) if ok else None),
                 "detail": detail,
                 "meta": {"confidence": r.confidence if ok else "low",
                          "sampleSize": num(r.available_quarter_count) or 0,
