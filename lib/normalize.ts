@@ -547,6 +547,33 @@ function packDetail(raw: any): AnalyzeResult["detail"] {
           granularity: String(raw.safety.granularity ?? "gu"),
         }
       : null,
+    // v2 신규 — 독립점포 관점 매출 (통계 추정). 구 번들엔 없으므로 optional 통과
+    independent:
+      raw.independent &&
+      (raw.independent.kSource === "industry_fit" ||
+        raw.independent.kSource === "scenario_only")
+        ? {
+            kSource: raw.independent.kSource,
+            isPure:
+              typeof raw.independent.isPure === "boolean"
+                ? raw.independent.isPure
+                : null,
+            onlyPercentile: num(raw.independent.onlyPercentile),
+            peerCount: num(raw.independent.peerCount),
+            peerMedianSalesKRW: num(raw.independent.peerMedianSalesKRW),
+            scenarios: Array.isArray(raw.independent.scenarios)
+              ? raw.independent.scenarios.map((s: any) => ({
+                  k: Number(s.k),
+                  salesKRW: num(s.salesKRW),
+                }))
+              : null,
+            kUsed: num(raw.independent.kUsed),
+            kFitR2: num(raw.independent.kFitR2),
+            kSampleSize: num(raw.independent.kSampleSize),
+            estimatedSalesKRW: num(raw.independent.estimatedSalesKRW),
+            basis: String(raw.independent.basis ?? "통계 추정"),
+          }
+        : null,
   };
 }
 
@@ -563,6 +590,10 @@ function normalizeAnalyze(
     dong: raw?.sangwon?.dong ?? null,
     lat: raw?.sangwon?.lat ?? null,
     lon: raw?.sangwon?.lon ?? null,
+    // v2 신규 — 상권 유형 5종 (규칙 기반). 구 번들·라이브엔 없음
+    type: typeof raw?.sangwon?.type === "string" ? raw.sangwon.type : null,
+    typeBasis:
+      typeof raw?.sangwon?.typeBasis === "string" ? raw.sangwon.typeBasis : null,
   };
   const industry = {
     code: String(raw?.industry?.code ?? req.industryCode),
@@ -612,6 +643,19 @@ function normalizeAnalyze(
           percentileInSangwon:
             raw.revenue.percentileAmongSangwons != null
               ? Number(raw.revenue.percentileAmongSangwons)
+              : null,
+          // v2 신규 — 업종별 test 오차(채점 결과). 없으면 신뢰도 표기 생략
+          accuracy:
+            raw.revenue.accuracy &&
+            Number.isFinite(Number(raw.revenue.accuracy.smapePct))
+              ? {
+                  smapePct: Number(raw.revenue.accuracy.smapePct),
+                  sampleN:
+                    raw.revenue.accuracy.sampleN != null
+                      ? Number(raw.revenue.accuracy.sampleN)
+                      : null,
+                  lowSample: Boolean(raw.revenue.accuracy.lowSample),
+                }
               : null,
           disclaimer: REVENUE_DISCLAIMER, // 모델 응답과 무관하게 강제 주입
           // 집계 수준은 산출물이 스스로 선언한다 (revenue.basis).

@@ -409,6 +409,63 @@ def main() -> int:
     latest_t = int(sv["_t"].max())
     print(f"      {len(sv):,}행 · dataAsOf={data_as_of} · _t={latest_t}")
 
+    # ---- 업종별 예측 오차(SMAPE) — 성적표(model_metadata.json)의 test_breakdown ----
+    # "이 업종에서 모델이 평균 몇 % 틀리는지"를 리포트에 그대로 노출한다 (투명성).
+    # 예측값이 아니라 채점 결과이므로 계보 분류는 '모델 채점'이다.
+    acc_by_industry: dict[str, dict] = {}
+    meta_p = os.path.join(repo, "models", "model_metadata.json")
+    if os.path.exists(meta_p):
+        with open(meta_p, encoding="utf-8") as f:
+            mmeta = json.load(f)
+        for a in (mmeta.get("test_breakdown", {}) or {}).get("by_industry") or []:
+            nm = a.get("서비스_업종_코드_명")
+            if nm and a.get("SMAPE") is not None:
+                acc_by_industry[nm] = {
+                    "smapePct": round(float(a["SMAPE"]), 1),
+                    "sampleN": int(a["n"]) if a.get("n") is not None else None,
+                    "lowSample": bool(a.get("low_sample", False)),
+                }
+        print(f"      업종별 예측오차(test SMAPE) {len(acc_by_industry)}개 업종 로드")
+    else:
+        print("      ⚠️ model_metadata.json 없음 — revenue.accuracy 생략")
+
+    def independent_block(r) -> dict | None:
+        """서빙 indep_* → detail.independent (독립점포 관점 매출 — 통계 추정, ML 예측 아님).
+
+        k = 프랜차이즈 1곳이 독립점포 몇 곳 몫을 파는지 (S ~ a·N + b·F 의 b/a, NNLS).
+        kSource:
+          - industry_fit  : 품질 게이트(표본·R²·시간 안정성) 통과 업종 — estimatedSalesKRW 제공
+          - scenario_only : 미통과 업종 — 고정 k 시나리오만 제공 (값을 지어내지 않는다)
+        금액 단위는 detail.sales.perStoreKRW 와 동일 (분기·점포당, 실측 기반).
+        """
+        src = getattr(r, "indep_k_source", None)
+        if not isinstance(src, str) or not src:
+            return None
+        scen = None
+        raw_scen = getattr(r, "indep_sales_scenarios", None)
+        if isinstance(raw_scen, str) and raw_scen:
+            try:
+                scen = [{"k": float(k.split("=", 1)[1]), "salesKRW": num(v)}
+                        for k, v in json.loads(raw_scen).items()]
+            except (ValueError, json.JSONDecodeError):
+                scen = None
+        is_pure = getattr(r, "indep_is_pure", None)
+        out_ = {
+            "kSource": src,
+            "isPure": bool(is_pure) if is_pure is not None and is_pure == is_pure else None,
+            "onlyPercentile": num(getattr(r, "indep_only_percentile", None)),
+            "peerCount": num(getattr(r, "indep_peer_count", None)),
+            "peerMedianSalesKRW": num(getattr(r, "indep_peer_median_sales", None)),
+            "scenarios": scen,
+            "kUsed": num(getattr(r, "indep_k_used", None)),
+            "kFitR2": num(getattr(r, "indep_k_fit_r2", None)),
+            "kSampleSize": num(getattr(r, "indep_k_sample_size", None)),
+            "estimatedSalesKRW": (num(getattr(r, "indep_estimated_sales", None))
+                                  if src == "industry_fit" else None),
+            "basis": "서울 관측 데이터 내부 회귀(NNLS) 추정 — 통계 가공, ML 예측 아님",
+        }
+        return out_
+
     print("[2/6] 원본 CSV 로드 (요일·시간대·성별·연령 분해 + 추이용)")
     enc = "utf-8-sig"
     raw_dir = os.path.join(repo, "data", "raw")
@@ -633,13 +690,19 @@ def main() -> int:
                     },
                     # 모델 저장소 원본(자치구 범죄·CCTV) 기준 — load_safety_by_gu() 주석 참조
                     "safety": safety_by_gu.get(r.자치구_코드_명),
+                    # 독립점포 관점 매출 (v2 신규, 통계 추정) — independent_block() 주석 참조
+                    "independent": independent_block(r),
                 }
 
             records[str(code)] = {
                 "status": "ok" if ok else "insufficient_data",
                 "sangwon": {"code": code, "name": r.상권_코드_명, "gu": r.자치구_코드_명,
                             "dong": r.행정동_코드_명,
-                            "lat": num(r.center_lat), "lon": num(r.center_lon)},
+                            "lat": num(r.center_lat), "lon": num(r.center_lon),
+                            # v2 신규: 상권 유형 5종 (규칙 기반 분류 — 상주·직장·유동 백분위)
+                            "type": (r.상권_유형 if isinstance(r.상권_유형, str) else None),
+                            "typeBasis": (r.상권_유형_근거
+                                          if isinstance(r.상권_유형_근거, str) else None)},
                 "industry": {"code": ind_code, "name": ind_name},
                 "survival": ({"probability": surv, "horizonYears": 3,
                               "basis": "empirical_closure_rate_shrunk",
@@ -649,7 +712,10 @@ def main() -> int:
                              if ok and surv is not None else None),
                 "revenue": ({"monthlyEstimateKRW": pred,
                              "percentileAmongSangwons": num(r.sales_percentile),
-                             "basis": "per_store_predicted"} if ok and pred is not None else None),
+                             "basis": "per_store_predicted",
+                             # v2 신규: 이 업종에서 모델이 test 에서 평균 몇 % 틀렸는지 (채점 결과)
+                             "accuracy": acc_by_industry.get(ind_name)}
+                            if ok and pred is not None else None),
                 "context": ({
                     "footTraffic": {
                         "total": num(prow.get("TOT_FLPOP_CO")) if prow is not None else None,
@@ -678,6 +744,7 @@ def main() -> int:
                                 "category": r.상권_구분_코드_명, "gu": r.자치구_코드_명,
                                 "dong": r.행정동_코드_명,
                                 "lat": num(r.center_lat), "lon": num(r.center_lon),
+                                "type": (r.상권_유형 if isinstance(r.상권_유형, str) else None),
                                 "footTraffic": num(prow.get("TOT_FLPOP_CO")) if prow is not None else None},
                     "dataAsOf": data_as_of,
                     "survivalGranularity": "sangwon_industry",

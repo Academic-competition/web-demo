@@ -59,10 +59,27 @@ export const SurvivalPayload = z.object({
 });
 export type SurvivalPayload = z.infer<typeof SurvivalPayload>;
 
+/**
+ * 업종별 예측 오차(모델 채점 결과) — v2 신규, 정적 산출물에만 존재.
+ * 예측값이 아니라 "이 업종에서 test 분기에 평균 몇 % 틀렸는지"다.
+ * 투명성 표기용 — 신뢰도 배지·문구에 쓰고, 점수 계산에 쓰지 말 것.
+ */
+export const RevenueAccuracy = z.object({
+  /** SMAPE(%) — 낮을수록 정확. 서울 평균 ≈ 26% */
+  smapePct: z.number(),
+  /** test 분기 채점 표본 수 */
+  sampleN: z.number().nullable(),
+  /** 표본이 적어 오차 추정 자체가 불안정한 업종 */
+  lowSample: z.boolean(),
+});
+export type RevenueAccuracy = z.infer<typeof RevenueAccuracy>;
+
 export const RevenuePayload = z.object({
   monthlyEstimateKRW: z.number(),
   /** 같은 업종 내 전체 상권 대비 백분위 (0~100) */
   percentileInSangwon: z.number().min(0).max(100).nullable(),
+  /** v2 신규 — 없으면(구 번들·라이브·목업) UI 는 신뢰도 표기를 생략 */
+  accuracy: RevenueAccuracy.nullable().optional(),
   /** 면책 문구 — 서버가 강제 주입, UI 누락 구조적으로 불가 */
   disclaimer: z.string().min(1),
   /**
@@ -301,6 +318,33 @@ export const HinterlandResult = z.object({
 });
 export type HinterlandResult = z.infer<typeof HinterlandResult>;
 
+/**
+ * 독립점포(비프랜차이즈) 관점 매출 — v2 신규, 통계 추정 (ML 예측 아님).
+ * k = 프랜차이즈 1곳이 독립점포 몇 곳 몫을 파는지 (서울 데이터 내부 회귀로 추정).
+ * kSource="industry_fit" 이면 품질 게이트 통과 → estimatedSalesKRW 제공,
+ * "scenario_only" 면 미통과 → 고정 k 시나리오만 (값을 지어내지 않음 — UI 도 그렇게 표기).
+ */
+export const IndependentDetail = z.object({
+  kSource: z.enum(["industry_fit", "scenario_only"]),
+  /** 이 상권이 프랜차이즈 0 인 '순수 독립' 상권인가 */
+  isPure: z.boolean().nullable(),
+  /** isPure 일 때: 순수 독립 상권들 사이 백분위 (0~100) */
+  onlyPercentile: z.number().nullable(),
+  /** Tier1 — 같은 업종 '프랜차이즈 0' 상권 표본 수·점포당 매출 중앙값 */
+  peerCount: z.number().nullable(),
+  peerMedianSalesKRW: z.number().nullable(),
+  /** Tier2 — 고정 k 가정 시나리오 (금액 단위 = detail.sales.perStoreKRW 와 동일) */
+  scenarios: z.array(z.object({ k: z.number(), salesKRW: z.number().nullable() })).nullable(),
+  /** Tier3 — 업종별 추정 k 와 그 품질 (industry_fit 일 때만 신뢰) */
+  kUsed: z.number().nullable(),
+  kFitR2: z.number().nullable(),
+  kSampleSize: z.number().nullable(),
+  /** 추정 k 적용 시 독립점포 기대 매출 — industry_fit 일 때만 값 존재 */
+  estimatedSalesKRW: z.number().nullable(),
+  basis: z.string(),
+});
+export type IndependentDetail = z.infer<typeof IndependentDetail>;
+
 export const AnalyzeDetail = z.object({
   sales: SalesDetail.nullable(),
   store: StoreDetail.nullable(),
@@ -308,6 +352,8 @@ export const AnalyzeDetail = z.object({
   comparison: ComparisonDetail.nullable(),
   /** crime.csv 로드 시에만 존재 — 없으면 웹이 '예시 데이터'로 폴백 */
   safety: SafetyDetail.nullable().optional(),
+  /** v2 신규 — 구 번들에는 없음 (UI 는 있을 때만 카드 렌더) */
+  independent: IndependentDetail.nullable().optional(),
 });
 export type AnalyzeDetail = z.infer<typeof AnalyzeDetail>;
 
@@ -321,6 +367,9 @@ export const AnalyzeResult = z.object({
     dong: z.string().nullable(),
     lat: z.number().nullable(),
     lon: z.number().nullable(),
+    /** v2 신규 — 상권 유형 5종 (주거형/직장형/유동형/주말·여가형/혼합형, 규칙 기반) */
+    type: z.string().nullable().optional(),
+    typeBasis: z.string().nullable().optional(),
   }),
   industry: z.object({ code: z.string(), name: z.string().nullable() }),
   survival: SurvivalPayload.nullable(),

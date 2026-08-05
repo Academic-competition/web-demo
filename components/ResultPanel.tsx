@@ -430,6 +430,15 @@ export default function ResultPanel({
             <p className="mt-0.5 text-xs text-muted">
               {subtitle && <span>{subtitle} · </span>}
               <span className="text-gold-soft">{industry.name ?? industry.code}</span>
+              {/* v2 신규 — 상권 유형 5종 (규칙 기반 분류, 계보 '헤더 상권 유형' 행) */}
+              {sangwon.type && (
+                <span
+                  title={sangwon.typeBasis ?? undefined}
+                  className="ml-1.5 inline-flex items-center rounded border border-line/70 bg-ink-700/60 px-1.5 py-px align-middle text-[10px] text-muted"
+                >
+                  {sangwon.type} 상권
+                </span>
+              )}
             </p>
           </div>
           {result.sourceMode === "mock" && <MockBadge />}
@@ -652,6 +661,25 @@ export default function ResultPanel({
           <p className="mt-3 border-l-2 border-caution/50 pl-2 text-[11px] leading-relaxed text-muted">
             {result.revenue.disclaimer}
           </p>
+          {/* v2 신규 — 업종별 test 오차(모델 성적표 채점 결과). 예측값이 아니라 투명성 표기 */}
+          {result.revenue.accuracy && (
+            <p className="mt-1.5 pl-2 text-[10px] leading-relaxed text-faint">
+              예측 신뢰도: 이 업종에서 모델은 검증(test) 분기에 평균{" "}
+              <b className="text-muted" style={{ fontFamily: "var(--font-numeric)" }}>
+                ±{result.revenue.accuracy.smapePct.toFixed(1)}%
+              </b>{" "}
+              오차(SMAPE)를 보였습니다
+              {result.revenue.accuracy.sampleN != null && (
+                <> · 채점 표본 {result.revenue.accuracy.sampleN.toLocaleString()}건</>
+              )}
+              {result.revenue.accuracy.lowSample && (
+                <>
+                  {" "}· <span className="text-caution">표본이 적어 오차 추정 자체가 불안정한 업종입니다</span>
+                </>
+              )}
+              . 모델 성적표의 업종별 채점 결과를 그대로 표시합니다.
+            </p>
+          )}
 
           {/* (b) 실측 집계 (카드 추정 원천값) */}
           {detail?.sales && (
@@ -765,6 +793,110 @@ export default function ResultPanel({
               </div>
             )}
           </div>
+
+          {/* v2 신규 — 독립점포(비프랜차이즈) 관점 매출: 통계 추정, ML 예측 아님.
+              프랜차이즈가 있거나(전체 평균이 독립 실상과 다를 수 있음) 순수 독립 상권일 때만 표시 */}
+          {detail?.independent &&
+            ((detail.store?.franchiseCount ?? 0) > 0 || detail.independent.isPure) && (
+              <div className="mt-2 rounded-lg border border-line/60 bg-ink-700/40 px-3 py-2.5">
+                <div className="flex items-center gap-1.5">
+                  <span className="rounded border border-line bg-ink-700/60 px-1.5 py-px text-[9px] font-medium text-muted">
+                    통계 추정
+                  </span>
+                  <span className="text-[10.5px] font-medium text-fg/90">
+                    독립점포(비프랜차이즈) 관점 매출
+                  </span>
+                </div>
+
+                {detail.independent.isPure ? (
+                  <p className="mt-1.5 text-[10.5px] leading-relaxed text-muted">
+                    이 상권의 {industry.name ?? "해당 업종"}은 <b className="text-fg/90">전부 독립점포</b>라
+                    실측 점포당 매출이 곧 독립점포 매출입니다.
+                    {detail.independent.onlyPercentile != null && detail.independent.peerCount != null && (
+                      <>
+                        {" "}같은 조건(프랜차이즈 0)의 상권 {detail.independent.peerCount.toLocaleString()}곳
+                        중 상위{" "}
+                        <b className="text-gold-soft" style={{ fontFamily: "var(--font-numeric)" }}>
+                          {(100 - detail.independent.onlyPercentile).toFixed(0)}%
+                        </b>
+                        입니다.
+                      </>
+                    )}
+                  </p>
+                ) : detail.independent.kSource === "industry_fit" &&
+                  detail.independent.estimatedSalesKRW != null ? (
+                  <>
+                    <div className="mt-1.5 flex items-end justify-between gap-3">
+                      <div>
+                        <div className="text-[10px] text-faint">추정 독립점포 매출 (점포당)</div>
+                        <div
+                          className="mt-0.5 text-lg font-semibold text-fg"
+                          style={{ fontFamily: "var(--font-numeric)" }}
+                        >
+                          {formatKRW(detail.independent.estimatedSalesKRW)}
+                        </div>
+                      </div>
+                      {detail.sales?.perStoreKRW != null && (
+                        <div className="shrink-0 text-right">
+                          <div className="text-[10px] text-faint">전체 점포 평균(실측)</div>
+                          <div
+                            className="text-sm font-semibold text-fg/80"
+                            style={{ fontFamily: "var(--font-numeric)" }}
+                          >
+                            {formatKRW(detail.sales.perStoreKRW)}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <p className="mt-1.5 text-[10px] leading-relaxed text-faint">
+                      프랜차이즈 1곳이 독립점포 약{" "}
+                      <b className="text-muted">{detail.independent.kUsed?.toFixed(1)}곳 몫</b>을 파는
+                      것으로 추정해(서울 실측 회귀
+                      {detail.independent.kFitR2 != null && <>, R² {detail.independent.kFitR2.toFixed(2)}</>}
+                      {detail.independent.kSampleSize != null && (
+                        <>, 표본 {detail.independent.kSampleSize.toLocaleString()}</>
+                      )}
+                      ) 전체 평균에서 독립점포 몫을 분리했습니다 — ML 예측이 아닌 통계 추정입니다.
+                      {detail.independent.peerCount != null &&
+                        detail.independent.peerMedianSalesKRW != null && (
+                          <>
+                            {" "}참고: 프랜차이즈 없는 같은 업종 상권{" "}
+                            {detail.independent.peerCount.toLocaleString()}곳의 실측 중앙값은{" "}
+                            {formatKRW(detail.independent.peerMedianSalesKRW)}입니다.
+                          </>
+                        )}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="mt-1.5 text-[10.5px] leading-relaxed text-muted">
+                      이 업종은 배수(k) 추정이 품질 기준(표본·설명력·시간 안정성)을 통과하지 못해{" "}
+                      <b className="text-fg/90">확정값 대신 가정별 시나리오만</b> 제시합니다 — 값을
+                      지어내지 않습니다.
+                    </p>
+                    {detail.independent.scenarios && (
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {detail.independent.scenarios.map(
+                          (s) =>
+                            s.salesKRW != null && (
+                              <span
+                                key={s.k}
+                                className="rounded border border-line/60 bg-ink-700/60 px-2 py-1 text-[10px] text-muted"
+                                title={`프랜차이즈 1곳 = 독립점포 ${s.k}곳 몫 판매 가정`}
+                              >
+                                배수 {s.k}× →{" "}
+                                <b className="text-fg/90" style={{ fontFamily: "var(--font-numeric)" }}>
+                                  {formatKRW(s.salesKRW)}
+                                </b>
+                              </span>
+                            )
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
 
           {result.context?.competition?.correction && (
             <div className="mt-2 rounded-lg border border-gold/25 bg-gold/5 px-3 py-2.5">

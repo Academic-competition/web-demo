@@ -98,6 +98,27 @@ export function provenanceOf(
       from: "revenue.percentileInSangwon",
     });
   }
+  if (result.revenue?.accuracy) {
+    // 예측값이 아니라 채점 결과 — 모델 성적표(test_breakdown)를 그대로 노출
+    rows.push({
+      block: "③ 예측 신뢰도(오차)",
+      kind: "stat",
+      how: `이 업종의 test 분기 평균 오차 SMAPE ${result.revenue.accuracy.smapePct}% — 모델 성적표 채점 결과`,
+      from: `revenue.accuracy (n=${result.revenue.accuracy.sampleN ?? "?"})`,
+    });
+  }
+  if (result.detail?.independent) {
+    const ind = result.detail.independent;
+    rows.push({
+      block: "④ 독립점포 관점 매출",
+      kind: "stat",
+      how:
+        ind.kSource === "industry_fit"
+          ? `프랜차이즈 배수 k=${ind.kUsed?.toFixed(2)} 를 서울 데이터 회귀로 추정해 독립점포 몫을 분리 (ML 예측 아님)`
+          : "업종 k 추정이 품질 게이트 미통과 → 고정 k 가정 시나리오만 제시 (값을 지어내지 않음)",
+      from: `detail.independent.kSource="${ind.kSource}"`,
+    });
+  }
   if (extra?.hasRanking) {
     rows.push({
       block: "① 상권 내 기회 순위",
@@ -179,6 +200,14 @@ export function provenanceOf(
   }
 
   // ── 규칙 기반 ──────────────────────────────────────────────
+  if (result.sangwon.type) {
+    rows.push({
+      block: "헤더 상권 유형",
+      kind: "rule",
+      how: `${result.sangwon.type} — ${result.sangwon.typeBasis ?? "규칙 기반 분류"}`,
+      from: `sangwon.type="${result.sangwon.type}"`,
+    });
+  }
   if (result.survival?.grade) {
     rows.push({
       block: "① 신호등 판정",
