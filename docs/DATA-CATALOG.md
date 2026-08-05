@@ -15,6 +15,7 @@
 | **추천 상권 TOP 10** (업종 먼저) | 히트맵과 같은 지표의 상위 10 | 통계 | ✅ |
 | **상권 내 업종 기회순위** (자리 먼저) | 서빙 `overall_score` 의 상권 내 백분위(`opportunityScore`) | 통계 | ✅ |
 | ① 종합 의견 (신호등+불릿+조언) | 생존율·백분위·경쟁·인구 + 웹 규칙 문장(advice.ts) | 규칙 | ✅ |
+| ① 경쟁 불릿 **시장 단계** (성장기 등 5종) | `market_stage` (개업·폐업·점포증감 규칙) | 규칙 | 🕐 |
 | ① 해석 문장 | 서빙 `recommendation` | 규칙 | ✅ |
 | ② 생존 전망 (3년 게이지) | 원천 폐업률 → `(1−r)^12` + EB 축소추정(k=20) | 통계 | ✅ |
 | ③ **예상 매출** (리포트 유일의 ML) | `predicted_sales_per_store` (다음 분기·점포당) | **ML 예측** | ✅ |
@@ -54,7 +55,7 @@
 | `grade` (A+~C) | 등급 | (웹은 자체 신호등 사용) | ⬜ |
 | `recommendation` | 한 줄 진단 문장 | ① 해석 문장 | ✅ |
 | `strengths` / `risks` | 강점·리스크 목록 | 미운반 — 모델 자체 프론트만 사용 | ⬜ |
-| `market_stage` | 시장 단계(도입/성장/안정/경쟁심화) — 8/3 버그 수정으로 560상권 정정 | ① 종합의견 근거 후보 | ⬜ |
+| `market_stage` | 시장 단계 5종(성장/안정/경쟁심화/재편/쇠퇴) — 8/3 버그 수정으로 560상권 정정 | ① 경쟁 불릿 | 🕐 |
 | `confidence`·`available_quarter_count` | 신뢰도·표본 분기 수 | 리포트 메타(UC-004 안내 포함) | ✅ |
 | 점수 성분: `saturation_score`·`demand_score`·`growth_score`·`sales_potential_score`·`closure_risk_score`·`score_rent_burden`·`score_vacancy_risk`·`score_price_rise_risk` | 종합점수의 부품들 | 미운반 (부품별 노출은 미기획) | ⬜ |
 | `score_safety_gu` | 자치구 안전점수(범죄50·검거25·CCTV25 백분위) | ⑥ 이중 점수·히트맵 토글 (`safety-scores.json` 경유) | ✅ |
@@ -109,7 +110,7 @@
 
 ## 4. 활용 후보 재고 (⬜ 모음 — 다음 개선 아이디어)
 
-1. `market_stage` → ① 종합의견 불릿 ("이 상권은 안정기") — 운반 1필드로 끝나는 저비용 항목
+1. ~~`market_stage` → ① 종합의견 불릿~~ → ✅ 8/5 구현 (① 경쟁 불릿, 재생성 대기)
 2. 인구 밀도 3종 → 지도 레이어 또는 ⑦ 밀도 카드
 3. `strengths`/`risks` → ① 불릿 보강 (웹 규칙 문장과 중복 검토 필요)
 4. `by_commercial_type`/`by_sales_size` 채점 → "이 유형 상권에서의 정확도" 이중 신뢰도

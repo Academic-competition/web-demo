@@ -723,7 +723,11 @@ def main() -> int:
                         "saturday": num(prow.get("SAT_FLPOP_CO")) if prow is not None else None,
                     },
                     "competition": {"storeCount": total_stores, "franchiseRatio": ratio,
-                                    "granularity": "sangwon_industry"},
+                                    "granularity": "sangwon_industry",
+                                    # v2 신규: 시장 단계 (개업률·폐업률·점포수 증감 규칙 —
+                                    # diagnosis.py market_stage(), 8/3 퍼센트 스케일 버그 수정본)
+                                    "marketStage": (r.market_stage
+                                                    if isinstance(r.market_stage, str) else None)},
                     "demographics": [{"ageBand": k, "ratio": v} for k, v in
                                      json.loads(r.age_distribution).items()]
                     if isinstance(r.age_distribution, str) else [],

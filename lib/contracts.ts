@@ -117,6 +117,12 @@ export const ContextPayload = z.object({
        *    다르다는 사실을 숨기지 않기 위한 필드다.
        */
       correction: z.string().nullable(),
+      /**
+       * v2 신규 — 시장 단계 (성장기/안정기/경쟁심화기/재편기/쇠퇴기).
+       * 개업률·폐업률·점포수 증감의 규칙 판정 (모델 저장소 diagnosis.py — 서비스 정책).
+       * 구 번들·라이브·목업엔 없음 → UI 는 있을 때만 표시.
+       */
+      marketStage: z.string().nullable().optional(),
     })
     .nullable(),
   demographics: z.array(

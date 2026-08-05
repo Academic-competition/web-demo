@@ -68,6 +68,15 @@ const SOURCE_LABEL = {
 } as const;
 
 /** 신호등 등급 → 종합 판정 문구/색 (Tailwind 정적 클래스로 명시) */
+/** 시장 단계별 강조 톤 (v2 신규 — diagnosis.py market_stage 규칙의 5단계) */
+const MARKET_STAGE_TONE: Record<string, string> = {
+  성장기: "text-safe",
+  안정기: "text-fg",
+  경쟁심화기: "text-caution",
+  재편기: "text-caution",
+  쇠퇴기: "text-risk",
+};
+
 const VERDICT: Record<Grade, { label: string; text: string; chip: string; ring: string; sentence: string }> = {
   safe: {
     label: "양호",
@@ -563,6 +572,18 @@ export default function ResultPanel({
               동일 업종 점포 <b className="text-fg">{result.context.competition.storeCount.toLocaleString()}개</b>
               {result.context.competition.franchiseRatio != null && (
                 <> · 프랜차이즈 {(result.context.competition.franchiseRatio * 100).toFixed(0)}%</>
+              )}
+              {/* v2 신규 — 시장 단계 (개업·폐업·점포수 증감 규칙 판정, 계보 '① 시장 단계' 행) */}
+              {result.context.competition.marketStage && (
+                <>
+                  {" "}· 시장 단계{" "}
+                  <b
+                    className={MARKET_STAGE_TONE[result.context.competition.marketStage] ?? "text-fg"}
+                    title="개업률·폐업률·점포수 증감의 규칙 판정 (모델 저장소 진단 규칙 — 서비스 정책값)"
+                  >
+                    {result.context.competition.marketStage}
+                  </b>
+                </>
               )}
               {result.context.competition.correction && <CorrectedBadge />}
               {result.context.competition.granularity === "seoul_industry" && (

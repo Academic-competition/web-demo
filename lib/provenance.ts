@@ -200,6 +200,14 @@ export function provenanceOf(
   }
 
   // ── 규칙 기반 ──────────────────────────────────────────────
+  if (result.context?.competition?.marketStage) {
+    rows.push({
+      block: "① 시장 단계",
+      kind: "rule",
+      how: `${result.context.competition.marketStage} — 개업률·폐업률·점포수 증감의 문턱값 판정 (서비스 정책)`,
+      from: `context.competition.marketStage="${result.context.competition.marketStage}"`,
+    });
+  }
   if (result.sangwon.type) {
     rows.push({
       block: "헤더 상권 유형",

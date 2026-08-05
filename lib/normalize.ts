@@ -685,6 +685,11 @@ function normalizeAnalyze(
                 granularity: String(raw.context.competition.granularity ?? "unknown"),
                 // 정적 산출물(구 모델)은 점포 수 정의가 다를 수 있어 보정하지 않는다
                 correction: null,
+                // v2 신규 — 시장 단계 (규칙 판정). 구 번들엔 없음
+                marketStage:
+                  typeof raw.context.competition.marketStage === "string"
+                    ? raw.context.competition.marketStage
+                    : null,
               }
             : null,
           demographics: Array.isArray(raw.context.demographics)
