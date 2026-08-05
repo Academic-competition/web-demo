@@ -17,14 +17,10 @@ pnpm dev        # http://localhost:3000
 **모델 서버 없이도 실데이터로 동작한다.** `model-exports/` 에 담긴 정적 산출물
 (62업종 × 1,570상권, [`tools/export_web_static.py`](tools/export_web_static.py) 산출)이 기본 소스다.
 
-> 남은 과제·인계 사항은 **[docs/OPEN-ITEMS.md](docs/OPEN-ITEMS.md)**,
-> 모델 저장소에 넘길 작업 요청은 **[docs/MODEL-REQUESTS.md](docs/MODEL-REQUESTS.md)**,
-> 그 근거를 직접 확인하는 방법은 **[docs/VERIFY-GUIDE.md](docs/VERIFY-GUIDE.md)**,
-> 모델 저장소 코드를 처음 보는 사람을 위한 안내는
-> **[docs/MODEL-CODE-TOUR.md](docs/MODEL-CODE-TOUR.md)** 에 있다.
-> 2026-08 모델 개선 실험(ML 이 나이브를 이김)은 **[docs/MODEL-EXPERIMENT-REPORT.md](docs/MODEL-EXPERIMENT-REPORT.md)**,
-> 그 쉬운 해설판은 **[docs/MODEL-EXPERIMENT-EXPLAINED.md](docs/MODEL-EXPERIMENT-EXPLAINED.md)** 참조.
-> 모델이 제공하는 데이터 전체와 웹 기능의 대응은 **[docs/DATA-CATALOG.md](docs/DATA-CATALOG.md)** (매칭표).
+> 📚 **문서가 12개다. 뭘 읽을지는 [docs/README.md](docs/README.md) 에서 목적별로 고르라** —
+> 낡아서 읽으면 안 되는 문서까지 구분해 뒀다.
+> 급하면 [docs/OPEN-ITEMS.md](docs/OPEN-ITEMS.md) **헤더 요약표**(현재 남은 일)와
+> [docs/DATA-CATALOG.md](docs/DATA-CATALOG.md)(화면 ↔ 데이터 매핑) 둘이면 된다.
 
 라이브 모델 서버를 붙이려면 `.env.local` 의 `MODEL_SERVER_URL` 주석을 해제하고:
 
