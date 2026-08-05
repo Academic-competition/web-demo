@@ -24,6 +24,7 @@ pnpm dev        # http://localhost:3000
 > **[docs/MODEL-CODE-TOUR.md](docs/MODEL-CODE-TOUR.md)** 에 있다.
 > 2026-08 모델 개선 실험(ML 이 나이브를 이김)은 **[docs/MODEL-EXPERIMENT-REPORT.md](docs/MODEL-EXPERIMENT-REPORT.md)**,
 > 그 쉬운 해설판은 **[docs/MODEL-EXPERIMENT-EXPLAINED.md](docs/MODEL-EXPERIMENT-EXPLAINED.md)** 참조.
+> 모델이 제공하는 데이터 전체와 웹 기능의 대응은 **[docs/DATA-CATALOG.md](docs/DATA-CATALOG.md)** (매칭표).
 
 라이브 모델 서버를 붙이려면 `.env.local` 의 `MODEL_SERVER_URL` 주석을 해제하고:
 
