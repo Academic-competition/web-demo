@@ -938,6 +938,15 @@ def main() -> int:
         ind_name = grp["서비스_업종_코드_명"].iloc[0]
         cells, records = [], {}
 
+        # 극단값 안내 재료 (2026-08-07, 삼성중앙역 5번 한식 11.4억/8점포 케이스).
+        # 좁은 상권은 점포 몇 개 평균이라 대형 사업장 하나에 값이 폭등한다 —
+        # 모델·라벨 문제가 아니라 원천 실측의 소표본 함정이며, 화면이 스스로
+        # 설명하게 판정 재료(업종 중앙값·경고문)를 여기(가공층)서 만들어 보낸다.
+        _preds = pd.to_numeric(grp["predicted_sales_per_store"], errors="coerce")
+        ind_median_pred = num(_preds.median())
+        _stores = pd.to_numeric(grp["전체_점포_수"], errors="coerce")
+        ind_median_stores = num(_stores.median())
+
         for r in grp.itertuples():
             code = int(r.상권_코드)
             # 단일 분기 폐업률(r.폐업_률)이 아니라 축소추정 폐업률을 쓴다 — 이유는 상단 주석
@@ -1050,6 +1059,20 @@ def main() -> int:
                 "revenue": ({"monthlyEstimateKRW": pred,
                              "percentileAmongSangwons": num(r.sales_percentile),
                              "basis": "per_store_predicted",
+                             # 해석 기준: 동일 업종 서울 중앙값(점포당 예측) — 값만 주면
+                             # 11억이 큰지 작은지 알 수 없다 (밀도·임대와 같은 패턴)
+                             "industryMedianKRW": ind_median_pred,
+                             # 소표본 극단값 경고 — 중앙값 10배 이상 + 점포 수가 업종
+                             # 중앙값 이하일 때만. 문구는 여기서 주입 (UI 하드코딩 금지)
+                             "extremeNote": (
+                                 (f"동일 업종 서울 중앙값의 {pred / ind_median_pred:.0f}배입니다. "
+                                  f"점포 {int(total_stores)}개 평균이라 소수 대형 사업장의 "
+                                  "영향일 수 있습니다 — 개별 점포의 기대 매출로 읽지 마세요.")
+                                 if (pred is not None and ind_median_pred
+                                     and pred >= ind_median_pred * 10
+                                     and total_stores is not None and ind_median_stores
+                                     and total_stores <= ind_median_stores)
+                                 else None),
                              # v2 신규: 업종별 + 상권유형별 test 오차 (채점 결과, 이중 신뢰도)
                              "accuracy": ({**acc_by_industry.get(ind_name, {}),
                                            **(acc_by_type.get(r.상권_유형, {})

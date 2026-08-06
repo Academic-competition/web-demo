@@ -664,6 +664,13 @@ function normalizeAnalyze(
             raw.revenue.percentileAmongSangwons != null
               ? Number(raw.revenue.percentileAmongSangwons)
               : null,
+          // 극단값 해석 재료 — 판정·문구는 export 산출 (소표본 평균 함정 안내)
+          industryMedianKRW:
+            raw.revenue.industryMedianKRW != null
+              ? Number(raw.revenue.industryMedianKRW)
+              : null,
+          extremeNote:
+            typeof raw.revenue.extremeNote === "string" ? raw.revenue.extremeNote : null,
           // v2 신규 — 업종별(+상권유형별) test 오차(채점 결과). 없으면 신뢰도 표기 생략
           accuracy:
             raw.revenue.accuracy &&

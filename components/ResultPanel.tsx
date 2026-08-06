@@ -843,9 +843,12 @@ export default function ResultPanel({
             <div>
               <div className="text-[30px] font-semibold leading-none text-fg" style={{ fontFamily: "var(--font-numeric)" }}>
                 {formatKRW(result.revenue.monthlyEstimateKRW)}
+                <span className="ml-1 text-[14px] font-normal text-gold-soft">/분기</span>
               </div>
               <div className="mt-1 text-[11px] text-muted">
-                월 기준(분기 평균) · {result.revenue.scaleNote}
+                {/* "월 기준(분기 평균)" 은 거짓 문구였다 — 값은 분기 합계 (KPI 주석 참조) */}
+                월평균 약 <b className="text-fg">{formatKRW(result.revenue.monthlyEstimateKRW / 3)}</b> ·{" "}
+                {result.revenue.scaleNote}
               </div>
             </div>
             {pct != null && (
@@ -861,6 +864,23 @@ export default function ResultPanel({
             <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-ink-600/70">
               <div className="h-full rounded-full bg-gradient-to-r from-gold/60 to-gold" style={{ width: `${pct}%` }} />
             </div>
+          )}
+          {/* 해석 기준 — 값만 주면 큰지 작은지 알 수 없다 (밀도·임대와 같은 패턴) */}
+          {result.revenue.industryMedianKRW != null && (
+            <p className="mt-2 text-[10.5px] text-faint">
+              동일 업종 서울 중앙값 {formatKRW(result.revenue.industryMedianKRW)}/분기
+              {result.revenue.industryMedianKRW > 0 && (
+                <> · 이 상권은 <b className="text-muted">
+                  {(result.revenue.monthlyEstimateKRW / result.revenue.industryMedianKRW).toFixed(1)}배
+                </b></>
+              )}
+            </p>
+          )}
+          {/* 소표본 극단값 경고 — 판정·문구는 export 산출 (삼성중앙역 5번 11억 케이스) */}
+          {result.revenue.extremeNote && (
+            <p className="mt-2 rounded-md border border-caution/40 bg-caution/10 px-3 py-2 text-[11px] leading-relaxed text-caution">
+              ⚠ {result.revenue.extremeNote}
+            </p>
           )}
           <p className="mt-3 border-l-2 border-caution/50 pl-2 text-[11px] leading-relaxed text-muted">
             {result.revenue.disclaimer}

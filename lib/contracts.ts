@@ -89,6 +89,14 @@ export const RevenuePayload = z.object({
   monthlyEstimateKRW: z.number(),
   /** 같은 업종 내 전체 상권 대비 백분위 (0~100) */
   percentileInSangwon: z.number().min(0).max(100).nullable(),
+  /** 동일 업종 서울 중앙값(점포당 예측, 분기) — 값의 해석 기준. 구 번들엔 없음 */
+  industryMedianKRW: z.number().nullable().optional(),
+  /**
+   * 소표본 극단값 경고 — export 가 판정·문구를 주입 (중앙값 10배↑ + 점포 수
+   * 업종 중앙값 이하). 예: 삼성중앙역 5번 한식 11.4억/8점포 = 중앙값의 23배.
+   * UI 는 있으면 표시만 한다 — 문구·임계값을 웹에서 만들지 말 것
+   */
+  extremeNote: z.string().nullable().optional(),
   /** v2 신규 — 없으면(구 번들·라이브·목업) UI 는 신뢰도 표기를 생략 */
   accuracy: RevenueAccuracy.nullable().optional(),
   /** 면책 문구 — 서버가 강제 주입, UI 누락 구조적으로 불가 */
