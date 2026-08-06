@@ -22,6 +22,7 @@ import ComparePanel from "@/components/ComparePanel";
 import TopIndustriesPanel from "@/components/TopIndustriesPanel";
 import TopSangwonsPanel from "@/components/TopSangwonsPanel";
 import TrendingPanel from "@/components/TrendingPanel";
+import NearbyPanel from "@/components/NearbyPanel";
 import {
   clearHistory,
   getHistoryServerSnapshot,
@@ -564,6 +565,16 @@ export default function Home() {
 
         {/* 결과 영역 */}
         <div className="panel-scroll flex-1 space-y-3.5 overflow-y-auto px-6 pb-4">
+          {/* 주변 상권 (반경 필터) — 지도 클릭/검색 지점이 있을 때, 위치 먼저 모드 한정.
+              golmok '나는 사장' 분석영역(반경) 대응 — 재집계 없이 목록 → 개별 리포트 */}
+          {mode === "location" && pickedPoint && (
+            <NearbyPanel
+              sangwons={sangwons}
+              point={pickedPoint}
+              selectedCode={selectedCode}
+              onPick={handleSelectSangwon}
+            />
+          )}
           {/* 비교 바스켓 — 담긴 게 있으면 리포트 위에 항상 보인다 (golmok compare_analysis) */}
           <ComparePanel
             results={compareResults}

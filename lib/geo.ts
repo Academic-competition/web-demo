@@ -23,6 +23,23 @@ export function haversineMeters(
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
+/**
+ * 반경 내 상권 목록 (거리순) — golmok '나는 사장' 분석영역(반경) 대응.
+ * 좌표 필터일 뿐 값을 재집계하지 않는다 — 영역 합산은 "웹이 수치를 만들지
+ * 않는다" 원칙에 걸리므로 상권 목록 → 개별 리포트로 연결한다.
+ */
+export function sangwonsWithin(
+  sangwons: Sangwon[], lat: number, lon: number, radiusMeters: number
+): { sangwon: Sangwon; distanceMeters: number }[] {
+  const out: { sangwon: Sangwon; distanceMeters: number }[] = [];
+  for (const s of sangwons) {
+    if (s.lat == null || s.lon == null) continue;
+    const d = haversineMeters(lat, lon, s.lat, s.lon);
+    if (d <= radiusMeters) out.push({ sangwon: s, distanceMeters: Math.round(d) });
+  }
+  return out.sort((a, b) => a.distanceMeters - b.distanceMeters);
+}
+
 export function nearestSangwon(
   sangwons: Sangwon[], lat: number, lon: number
 ): { sangwon: Sangwon; distanceMeters: number; withinBoundary: boolean } | null {
