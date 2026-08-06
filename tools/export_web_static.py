@@ -500,9 +500,26 @@ def rebuild_hinterland(repo: str, out: str) -> dict | None:
                 "byAge": dist(r, [(f"AGRDE_{a}_REPOP_CO", lb) for a, lb in AGE_LABELS], total),
                 "asOf": res_asof,
             }
+            # 가구 블록 (2026-08-06) — 같은 상주인구 데이터셋의 TOT_HSHLD_CO.
+            # 구판 "총 가구 수는 없다"(unavailable)는 **아파트-상권 데이터셋** 기준
+            # 서술이었다. 상주인구-상권에는 총 가구가 있다.
+            #
+            # ⚠️ 아파트/비아파트 **분해는 내보내지 않는다** — 원본 실측 결과
+            # APT_HSHLD_CO 가 전 분기(21개)·전 상권(1,633) 에서 0 이고
+            # NON_APT_HSHLD_CO = TOT_HSHLD_CO 복사다 (컬럼은 있으나 값 미제공).
+            # 이걸 내보내면 아파트 밀집 상권에 "아파트 0%" 라는 거짓이 표시된다.
+            # 아파트 세대수는 아파트-상권 데이터셋(apartment 블록)이 진짜 값을 갖는다.
+            hh_total = num(r.get("TOT_HSHLD_CO"))
+            entry["household"] = ({
+                "total": int(hh_total),
+                "apt": None,
+                "nonApt": None,
+                "asOf": res_asof,
+            } if hh_total is not None else None)
             n_res += 1
         else:
             entry["resident"] = None
+            entry["household"] = None
         if icode in wrk.index:
             w = wrk.loc[icode]
             total = num(w["TOT_WRC_POPLTN_CO"])
@@ -517,6 +534,11 @@ def rebuild_hinterland(repo: str, out: str) -> dict | None:
 
     doc["asOf"]["resident"] = res_asof
     doc["asOf"]["worker"] = wrk_asof
+    doc["asOf"]["household"] = res_asof
+    # 가구 수가 제공되므로 '제공하지 않는 항목'에서 제거한다.
+    # (아파트-상권 기준의 옛 사유가 남아 있으면 화면이 "없다"고 거짓말을 하게 된다)
+    doc["unavailable"] = [u for u in doc.get("unavailable", [])
+                          if "가구" not in str(u.get("item", ""))]
     # 출처: 상주·직장만 모델 저장소 표기로 교체, 나머지는 유지
     kept = [s for s in doc.get("sources", [])
             if "상주인구" not in s and "직장인구" not in s]
@@ -525,8 +547,9 @@ def rebuild_hinterland(repo: str, out: str) -> dict | None:
         f"서울 열린데이터광장 상권분석서비스 — 직장인구-상권 ({wrk_asof}, Commercial-AI-/data/raw API 수집본)",
     ] + kept
 
+    n_hh = sum(1 for e in by.values() if e.get("household"))
     write_json_gz(gz_path, doc)
-    return {"resident": n_res, "worker": n_wrk,
+    return {"resident": n_res, "worker": n_wrk, "household": n_hh,
             "asOf": f"{res_asof}/{wrk_asof}", "sangwons": len(by)}
 
 
@@ -872,7 +895,8 @@ def main() -> int:
 
     # 배후지: 상주·직장인구 블록을 모델 저장소 CSV 로 교체 (rebuild_hinterland 주석 참조)
     hint = rebuild_hinterland(repo, out)
-    hint_note = (f"배후지 상주 {hint['resident']:,}·직장 {hint['worker']:,} ({hint['asOf']})"
+    hint_note = (f"배후지 상주 {hint['resident']:,}·직장 {hint['worker']:,}"
+                 f"·가구 {hint['household']:,} ({hint['asOf']})"
                  if hint else "배후지 생략 (인구 CSV 미보유)")
 
     print(f"      업종 {len(inds)} · 상권 {len(sw)} · 폐업률 사전표 {len(ind_prior)}"

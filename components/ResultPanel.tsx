@@ -1528,6 +1528,23 @@ export default function ResultPanel({
                   ) : null}
                 </div>
               )}
+              {h.household?.total != null && (
+                <div className="rounded-lg bg-ink-700/50 px-3 py-2.5">
+                  <div className="flex items-center gap-1 text-[10px] text-faint">
+                    가구 수 {asOfChip(h.household.asOf)}
+                  </div>
+                  <div className="mt-0.5 text-base font-semibold text-fg" style={{ fontFamily: "var(--font-numeric)" }}>
+                    {h.household.total.toLocaleString()}가구
+                  </div>
+                  {/* 아파트/일반 분해는 원본 미제공 (APT_HSHLD_CO 전 구간 0) —
+                      아파트 세대수는 옆 '아파트' 블록이 별도 데이터셋으로 답한다 */}
+                  {h.apartment?.households != null && h.household.total > 0 && (
+                    <div className="mt-0.5 text-[10px] text-muted">
+                      이 중 아파트 세대 {h.apartment.households.toLocaleString()} (아파트-상권 기준)
+                    </div>
+                  )}
+                </div>
+              )}
               {h.apartment && (h.apartment.complexes != null || h.apartment.avgPriceKRW != null) && (
                 <div className="rounded-lg bg-ink-700/50 px-3 py-2.5">
                   <div className="flex items-center gap-1 text-[10px] text-faint">

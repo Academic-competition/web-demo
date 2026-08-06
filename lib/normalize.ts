@@ -1204,6 +1204,14 @@ export async function hinterland(sangwonCode: number): Promise<HinterlandResult>
                   asOf: String(raw.worker.asOf ?? "unknown"),
                 }
               : null,
+            household: raw.household
+              ? {
+                  total: n(raw.household.total),
+                  apt: n(raw.household.apt),
+                  nonApt: n(raw.household.nonApt),
+                  asOf: String(raw.household.asOf ?? "unknown"),
+                }
+              : null,
             apartment: raw.apartment
               ? {
                   complexes: n(raw.apartment.complexes),

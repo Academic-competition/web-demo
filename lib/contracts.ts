@@ -339,6 +339,16 @@ export const HinterlandDetail = z.object({
     })
     .nullable()
     .optional(),
+  /** 배후지 가구 — 상주인구-상권 데이터셋의 총/아파트/비아파트 가구 (2026-08-06 추가) */
+  household: z
+    .object({
+      total: z.number().nullable(),
+      apt: z.number().nullable(),
+      nonApt: z.number().nullable(),
+      asOf: z.string(),
+    })
+    .nullable()
+    .optional(),
   apartment: z
     .object({
       complexes: z.number().nullable(),
