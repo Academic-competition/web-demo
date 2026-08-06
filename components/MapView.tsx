@@ -11,6 +11,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { HeatmapResult, MetaResult } from "@/lib/contracts";
+import { inspect } from "@/lib/inspector";
 
 declare global {
   interface Window {
@@ -80,7 +81,8 @@ function useKakaoLoaded(): "loading" | "ready" | "unavailable" {
       return;
     }
     const script = document.createElement("script");
-    script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_KEY}&autoload=false`;
+    // libraries=services — 주소/장소 검색(Places). 없으면 PlaceSearch 가 조용히 숨는다
+    script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_KEY}&autoload=false&libraries=services`;
     script.async = true;
     script.onload = () => window.kakao.maps.load(() => setState("ready"));
     script.onerror = () => setState("unavailable");
@@ -318,6 +320,21 @@ function KakaoMap({
   return (
     <div className="relative h-full w-full">
       <div ref={containerRef} className="h-full w-full" />
+      {/* 주소/장소 검색 — golmok '나는 사장' 점포위치 검색 대응.
+          결과 클릭 = 지도 클릭과 동일 경로(onPickPoint → 최근접 상권 매핑) */}
+      <PlaceSearch
+        onPick={(lat, lng, label) => {
+          inspect("map", `주소 검색 선택 — ${label} (${lat.toFixed(6)}, ${lng.toFixed(6)})`, {
+            label,
+            lat,
+            lng,
+          });
+          const kakao = window.kakao;
+          mapRef.current?.panTo(new kakao.maps.LatLng(lat, lng));
+          if (mapRef.current?.getLevel() > 5) mapRef.current.setLevel(5);
+          clickHandlerRef.current(lat, lng);
+        }}
+      />
       {/* 범례 */}
       {mode === "industry" && heatmap && (
         <div className="absolute bottom-4 left-4 z-10 rounded-lg border border-line/70 bg-ink-900/90 px-3.5 py-2.5 text-[11px] text-muted backdrop-blur">
@@ -488,6 +505,100 @@ function FallbackPicker({
           <div className="px-3 py-8 text-center text-sm text-faint">검색 결과가 없습니다</div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ------------------------------------------------------------------
+// 주소/장소 검색 (golmok '나는 사장' 점포위치 검색 대응)
+//
+// 카카오 services 라이브러리(Places.keywordSearch)를 쓴다 — 위치 "입력 수단"이라
+// 데이터 주체(모델) 정책과 무관하다 (지도 타일과 같은 지위). services 가 없으면
+// (키 없음·구버전 캐시) 조용히 렌더하지 않는다 — 지도 클릭 경로는 그대로 살아 있다.
+// 결과는 서울로 제한한다 (분석 대상이 서울 상권뿐이므로 다른 지역은 경계 밖 안내만 나온다).
+// ------------------------------------------------------------------
+function PlaceSearch({
+  onPick,
+}: {
+  onPick: (lat: number, lng: number, label: string) => void;
+}) {
+  const [q, setQ] = useState("");
+  const [results, setResults] = useState<
+    { id: string; name: string; address: string; lat: number; lng: number }[]
+  >([]);
+  const [open, setOpen] = useState(false);
+  const placesRef = useRef<any>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const available = !!window.kakao?.maps?.services;
+
+  useEffect(() => {
+    if (!available) return;
+    if (!q.trim()) {
+      setResults([]);
+      return;
+    }
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      const kakao = window.kakao;
+      placesRef.current ??= new kakao.maps.services.Places();
+      placesRef.current.keywordSearch(q, (data: any[], status: string) => {
+        if (status !== kakao.maps.services.Status.OK) {
+          setResults([]);
+          return;
+        }
+        setResults(
+          data
+            .filter((p) => String(p.address_name ?? "").startsWith("서울"))
+            .slice(0, 6)
+            .map((p) => ({
+              id: String(p.id),
+              name: String(p.place_name),
+              address: String(p.road_address_name || p.address_name),
+              lat: Number(p.y),
+              lng: Number(p.x),
+            }))
+        );
+      });
+    }, 300);
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [q, available]);
+
+  if (!available) return null;
+
+  return (
+    <div className="absolute left-4 top-4 z-10 w-72">
+      <input
+        value={q}
+        onChange={(e) => {
+          setQ(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        placeholder="주소·장소 검색 (예: 서울시청, 노량진역)"
+        className="w-full rounded-lg border border-line/70 bg-ink-900/90 px-3 py-2 text-[13px] text-fg placeholder:text-faint backdrop-blur focus:border-gold/60 focus:outline-none"
+      />
+      {open && results.length > 0 && (
+        <ul className="mt-1 overflow-hidden rounded-lg border border-line/70 bg-ink-900/95 backdrop-blur">
+          {results.map((r) => (
+            <li key={r.id}>
+              <button
+                onClick={() => {
+                  setOpen(false);
+                  setQ(r.name);
+                  onPick(r.lat, r.lng, r.name);
+                }}
+                className="flex w-full flex-col px-3 py-2 text-left transition hover:bg-ink-700/70"
+              >
+                <span className="text-[12.5px] text-fg">{r.name}</span>
+                <span className="text-[10.5px] text-faint">{r.address}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
