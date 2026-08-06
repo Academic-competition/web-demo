@@ -160,6 +160,9 @@ export const ContextPayload = z.object({
       areaKm2: z.number().nullable(),
       guName: z.string().nullable().optional(),
       guMedian: DensityTriple.nullable().optional(),
+      /** 행정동 층 (4단 비교) — 동 안에 상권이 1개뿐이면 자기 자신이라 export 가 null 로 준다 */
+      dongName: z.string().nullable().optional(),
+      dongMedian: DensityTriple.nullable().optional(),
       seoulMedian: DensityTriple.nullable().optional(),
     })
     .nullable()

@@ -730,6 +730,8 @@ function normalizeAnalyze(
                   areaKm2: nn(d.areaKm2),
                   guName: typeof d.guName === "string" ? d.guName : null,
                   guMedian: triple(d.guMedian),
+                  dongName: typeof d.dongName === "string" ? d.dongName : null,
+                  dongMedian: triple(d.dongMedian),
                   seoulMedian: triple(d.seoulMedian),
                 };
               })()

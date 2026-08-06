@@ -688,9 +688,17 @@ def main() -> int:
     density_gu = {}
     for gu_name, g in _sw_uniq.groupby("자치구_코드_명"):
         density_gu[gu_name] = {k: num(g[c].median()) for k, c in _dens_cols.items() if c in g}
+    # 행정동 중앙값 — 4단 비교(서울/구/동/상권)의 동 층 (golmok 은 4단, 우리는 3단이었다).
+    # 키는 코드 — 신사동이 서울에 두 곳이다 (rankings byDong 과 같은 이유).
+    density_dong = {}
+    for dong_code, g in _sw_uniq.groupby("행정동_코드"):
+        density_dong[int(dong_code)] = {
+            **{k: num(g[c].median()) for k, c in _dens_cols.items() if c in g},
+            "n": int(len(g)),  # 동 안의 상권 수 — 1개면 자기 자신과의 비교라 UI 가 숨긴다
+        }
     rent_seoul = num(_sw_uniq["re_rent_per_m2"].median()) if "re_rent_per_m2" in _sw_uniq else None
     print(f"      비교 기준: 밀도 서울중앙값 {len(density_seoul)}종 · 자치구 {len(density_gu)}개"
-          f" · 임대 서울중앙값 {rent_seoul}")
+          f" · 행정동 {len(density_dong)}개 · 임대 서울중앙값 {rent_seoul}")
 
     def density_block(r) -> dict | None:
         """인구 밀도 3종 (명/km², 상권 영역 면적 기준) — 실측 ÷ 면적 단순 환산.
@@ -709,6 +717,13 @@ def main() -> int:
         vals["areaKm2"] = round(area / 1_000_000, 4) if area else None
         vals["guName"] = r.자치구_코드_명
         vals["guMedian"] = density_gu.get(r.자치구_코드_명)
+        # 행정동 층 (4단 비교). 동 안에 상권이 자기뿐이면(n=1) 중앙값 = 자기 자신이라
+        # 비교 정보가 없다 — None 으로 내보내 UI 가 동 층을 조용히 생략하게 한다.
+        _dc = num(getattr(r, "행정동_코드", None))
+        _dm = density_dong.get(int(_dc)) if _dc is not None else None
+        vals["dongName"] = str(getattr(r, "행정동_코드_명", "")) or None
+        vals["dongMedian"] = ({k: v for k, v in _dm.items() if k != "n"}
+                              if _dm and _dm.get("n", 0) >= 2 else None)
         vals["seoulMedian"] = density_seoul or None
         return vals
 

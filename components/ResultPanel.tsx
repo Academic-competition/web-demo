@@ -1280,6 +1280,11 @@ export default function ResultPanel({
                         {gu != null && v != null && (
                           <div className="text-[9px] leading-tight text-faint">
                             {d.guName ?? "자치구"} 중앙 {formatPeopleCompact(gu)}
+                            {/* 행정동 층 (4단 비교 — golmok 은 서울/구/동/상권 4단이었다).
+                                동 안에 상권이 1개뿐이면 export 가 null 을 줘 이 줄이 생략된다 */}
+                            {d.dongMedian?.[key] != null && (
+                              <> · {d.dongName ?? "행정동"} 중앙 {formatPeopleCompact(d.dongMedian[key]!)}</>
+                            )}
                           </div>
                         )}
                       </div>
