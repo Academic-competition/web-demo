@@ -556,6 +556,8 @@ export const MetaResult = z.object({
       dong: z.string().nullable(),
       lat: z.number().nullable(),
       lon: z.number().nullable(),
+      /** 상권 영역 면적(m²) — 경계 폴리곤이 원천에 없어 지도는 등면적 원으로 근사 */
+      areaM2: z.number().nullable().optional(),
     })
   ),
 });

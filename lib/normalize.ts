@@ -1085,6 +1085,7 @@ export async function metaViaFile(): Promise<MetaResult> {
       dong: s.dong ?? null,
       lat: s.lat ?? null,
       lon: s.lon ?? null,
+      areaM2: s.areaM2 ?? null,
     })),
   };
 }

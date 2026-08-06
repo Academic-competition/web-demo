@@ -196,6 +196,9 @@ function KakaoMap({
   /** 상권코드 → {circle, color} — 하이라이트 원복에 원래 색이 필요하다 */
   const circleByCodeRef = useRef<Map<number, { circle: any; color: string }>>(new Map());
   const selectedOverlayRef = useRef<any>(null);
+  /** 선택 상권의 영역 근사 원 + 클릭 지점 연결선 (아래 선택 하이라이트 effect 참조) */
+  const selectedAreaRef = useRef<any>(null);
+  const snapLineRef = useRef<any>(null);
   const pickedMarkerRef = useRef<any>(null);
   const clickHandlerRef = useRef(onPickPoint);
   clickHandlerRef.current = onPickPoint;
@@ -275,12 +278,47 @@ function KakaoMap({
 
     selectedOverlayRef.current?.setMap(null);
     selectedOverlayRef.current = null;
+    selectedAreaRef.current?.setMap(null);
+    selectedAreaRef.current = null;
+    snapLineRef.current?.setMap(null);
+    snapLineRef.current = null;
 
     if (selectedCode == null) return;
     const s = sangwons.find((x) => x.code === selectedCode);
     if (!s || s.lat == null || s.lon == null) return;
 
     const pos = new kakao.maps.LatLng(s.lat, s.lon);
+
+    // 상권 영역 근사 원 (8/7 피드백 — golmok 은 경계 폴리곤을 그리는데 우리는 점뿐).
+    // 원천에 폴리곤이 없어 영역_면적으로 등면적 원(√(A/π))을 그린다 — 실제 모양이
+    // 아님을 라벨(영역 근사)로 밝힌다. 클릭 지점→상권 중심 점선이 "왜 여기로
+    // 묶였는지"(최근접 매핑)를 보여준다.
+    if (s.areaM2 != null && s.areaM2 > 0) {
+      const radius = Math.sqrt(s.areaM2 / Math.PI);
+      const area = new kakao.maps.Circle({
+        center: pos,
+        radius,
+        strokeWeight: 2,
+        strokeColor: "#e3b65a",
+        strokeOpacity: 0.9,
+        strokeStyle: "shortdash",
+        fillColor: "#e3b65a",
+        fillOpacity: 0.08,
+      });
+      area.setMap(map);
+      selectedAreaRef.current = area;
+    }
+    if (pickedPoint && modeRef.current === "location") {
+      const line = new kakao.maps.Polyline({
+        path: [new kakao.maps.LatLng(pickedPoint.lat, pickedPoint.lng), pos],
+        strokeWeight: 2,
+        strokeColor: "#e3b65a",
+        strokeOpacity: 0.55,
+        strokeStyle: "dot",
+      });
+      line.setMap(map);
+      snapLineRef.current = line;
+    }
     const overlay = new kakao.maps.CustomOverlay({
       position: pos,
       yAnchor: 1.25,
@@ -288,8 +326,11 @@ function KakaoMap({
         <div style="display:flex;flex-direction:column;align-items:center;pointer-events:none;">
           <div style="background:#0e1526;color:#e9edf6;border:1px solid #e3b65a;
                       border-radius:8px;padding:4px 10px;font-size:12px;font-weight:600;
-                      box-shadow:0 4px 14px rgba(0,0,0,.45);white-space:nowrap;">
+                      box-shadow:0 4px 14px rgba(0,0,0,.45);white-space:nowrap;text-align:center;">
             ${s.name ?? s.code}
+            ${s.areaM2 != null && s.areaM2 > 0
+              ? `<div style="font-size:9px;font-weight:400;color:#8b93ab;">점선 원 = 상권 영역 ${(s.areaM2 / 10000).toFixed(1)}ha 근사</div>`
+              : ""}
           </div>
           <div style="width:2px;height:10px;background:#e3b65a;"></div>
           <div style="width:10px;height:10px;border-radius:50%;background:#e3b65a;
@@ -300,7 +341,8 @@ function KakaoMap({
     selectedOverlayRef.current = overlay;
     map.panTo(pos);
     if (map.getLevel() > 6) map.setLevel(6, { anchor: pos });
-  }, [selectedCode, sangwons]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCode, sangwons, pickedPoint]);
 
   // 클릭 지점 마커 (위치 먼저 모드)
   useEffect(() => {

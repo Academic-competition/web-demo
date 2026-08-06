@@ -888,14 +888,17 @@ def main() -> int:
                   f, ensure_ascii=False)
 
     sw = (sv[["상권_코드", "상권_코드_명", "상권_구분_코드_명", "자치구_코드_명",
-              "행정동_코드_명", "center_lat", "center_lon"]]
+              "행정동_코드_명", "center_lat", "center_lon", "영역_면적"]]
           .drop_duplicates("상권_코드").sort_values("상권_코드"))
     with open(os.path.join(out, "meta", "sangwons.json"), "w", encoding="utf-8") as f:
         json.dump({"dataAsOf": data_as_of,
                    "sangwons": [{"code": int(r.상권_코드), "name": r.상권_코드_명,
                                  "category": r.상권_구분_코드_명, "gu": r.자치구_코드_명,
                                  "dong": r.행정동_코드_명,
-                                 "lat": num(r.center_lat), "lon": num(r.center_lon)}
+                                 "lat": num(r.center_lat), "lon": num(r.center_lon),
+                                 # 상권 영역 면적(m²) — 경계 폴리곤은 원천에 없어
+                                 # 지도에서 등면적 원(√(A/π))으로 근사 표시한다
+                                 "areaM2": num(r.영역_면적)}
                                 for r in sw.itertuples()]},
                   f, ensure_ascii=False)
     # 라이브 경로(normalize.ts)가 같은 축소추정을 적용할 수 있도록 업종 사전률을 함께 내보낸다.
