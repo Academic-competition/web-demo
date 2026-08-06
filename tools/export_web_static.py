@@ -292,6 +292,100 @@ def load_safety_by_gu(repo: str, sv) -> tuple[dict, dict]:
     return detail_by_gu, scores_meta
 
 
+def build_rankings(sales, pop, store, repo: str, out: str) -> dict:
+    """
+    상권 단위 지표 랭킹 재료 — golmok '뜨는 상권' 대응 (2026-08-06).
+
+    지표 5종(점포수·매출·유동인구·상주인구·직장인구)의 상권별
+    {value, prev, changePct} 를 meta/rankings.json.gz 로 내보낸다.
+    **정렬·순위 매기기는 웹 표시 계층 몫** — 여기서는 값만 준다.
+    (합계·증감률 '산출'은 데이터 가공층인 이 스크립트 책임 — 웹이 수치를
+    만들지 않는 원칙의 경계가 여기다. ComparePanel 설계 제약과 동일.)
+
+    - stores/sales: 상권×업종 행을 상권으로 **합산**.
+      ⚠️ 원천이 생활밀접업종 62종이라 '상권 전체'가 아니다 — scope 에 명시하고
+      UI 가 그대로 노출한다 (집계 기준을 숨기면 golmok 수치와 달라 보이는 이유를
+      설명할 수 없게 된다)
+    - footTraffic: population.csv 가 애초에 상권 단위 (합산 없음)
+    - resident/worker: 모델 저장소 인구 CSV. **asOf 가 다르다** (2026Q1 vs 2025Q2)
+      — 지표별 asOf 를 파일에 싣고 UI 가 표기한다 (배후지 항목별 as-of 와 같은 패턴)
+    - changePct 는 직전 분기 대비. 직전 값이 없거나 0 이면 null (0 나누기 금지)
+    """
+    import pandas as pd
+
+    def q_str(t: int) -> str:
+        return f"{t // 4}Q{t % 4 + 1}"
+
+    def per_sangwon(df, value_col: str, agg: bool):
+        """상권별 {code: (latest, prev)} + asOf. agg=True 면 업종 합산."""
+        if agg:
+            g = df.groupby(["TRDAR_CD", "_t"])[value_col].sum().reset_index()
+        else:
+            g = df[["TRDAR_CD", "_t", value_col]].copy()
+        t_max = int(g["_t"].max())
+        cur = g[g["_t"] == t_max].set_index("TRDAR_CD")[value_col]
+        prv = g[g["_t"] == t_max - 1].set_index("TRDAR_CD")[value_col]
+        return cur, prv, q_str(t_max)
+
+    # 상주·직장인구 — rebuild_hinterland 와 같은 원본 (상권×분기, 값 있는 분기만)
+    def pop_csv(fname: str, tot_col: str):
+        df = pd.read_csv(os.path.join(repo, "data", "raw", fname), encoding="utf-8-sig")
+        df[tot_col] = pd.to_numeric(df[tot_col], errors="coerce")
+        df = df[df[tot_col].notna()].copy()
+        q = df["STDR_YYQU_CD"].astype(str)
+        df["_t"] = q.str[:4].astype(int) * 4 + (q.str[4:5].astype(int) - 1)
+        return df
+
+    resident = pop_csv("resident_population.csv", "TOT_REPOP_CO")
+    worker = pop_csv("worker_population.csv", "TOT_WRC_POPLTN_CO")
+
+    SCOPE_62 = "생활밀접업종 62종 합계 (상권 전체 아님)"
+    metric_defs = [
+        # key, (df, value_col, 업종합산여부), label, unit, scope
+        ("stores", (store, "SIMILR_INDUTY_STOR_CO", True), "점포 수", "개", SCOPE_62),
+        ("sales", (sales, "THSMON_SELNG_AMT", True), "분기 매출", "KRW",
+         SCOPE_62 + " · 카드 결제 기반 실측 추정"),
+        ("footTraffic", (pop, "TOT_FLPOP_CO", False), "분기 유동인구", "명", "상권 전체"),
+        ("resident", (resident, "TOT_REPOP_CO", False), "상주인구", "명", "상권 전체"),
+        ("worker", (worker, "TOT_WRC_POPLTN_CO", False), "직장인구", "명", "상권 전체"),
+    ]
+
+    by_sangwon: dict[str, dict] = {}
+    metrics_meta: dict[str, dict] = {}
+    for key, (df, col, agg), label, unit, scope in metric_defs:
+        cur, prv, asof = per_sangwon(df, col, agg)
+        # 소표본 판정 기준 — golmok 은 "돈암1동 커피 5만원 +326%" 같은 소표본 노이즈가
+        # 증가율 랭킹 상위를 점령했다 (벤치마크 실측). 직전 분기 값이 전 상권 중앙값
+        # 미만이면 lowBase 로 표시해 UI 가 기본 제외하고 그 사실을 밝히게 한다.
+        # 판정 재료(중앙값)는 여기(가공층)서 계산 — 웹은 플래그만 쓴다.
+        prev_median = float(prv.median()) if len(prv) else 0.0
+        metrics_meta[key] = {"label": label, "unit": unit, "scope": scope, "asOf": asof,
+                             "lowBaseThreshold": num(prev_median)}
+        for code, v in cur.items():
+            value = num(v)
+            if value is None:
+                continue
+            prev = num(prv.get(code))
+            entry = by_sangwon.setdefault(str(int(code)), {})
+            entry[key] = {
+                "value": value,
+                "prev": prev,
+                "changePct": (round((value - prev) / prev * 100, 2)
+                              if prev is not None and prev > 0 else None),
+                "lowBase": (prev is None or prev < prev_median),
+            }
+
+    doc = {
+        "metrics": metrics_meta,
+        "note": "상권 단위 지표 랭킹 재료. 값·증감률은 파이프라인 산출이며 "
+                "웹은 정렬·표시만 한다. 점포수·매출은 생활밀접업종 62종 합계 기준.",
+        "bySangwon": by_sangwon,
+    }
+    write_json_gz(os.path.join(out, "meta", "rankings.json.gz"), doc)
+    return {"sangwons": len(by_sangwon),
+            "asOf": "/".join(m["asOf"] for m in metrics_meta.values())}
+
+
 def rebuild_hinterland(repo: str, out: str) -> dict | None:
     """
     배후지(meta/hinterland.json.gz)의 **상주·직장인구 블록을 모델 저장소 데이터로 교체**
@@ -720,6 +814,10 @@ def main() -> int:
     except Exception as e:  # 원본 CSV 미보유 환경 — 치안 없이도 나머지는 내보낸다
         safety_by_gu = {}
         print(f"      ⚠️ 치안 생략 (data/raw/external/ 없음?): {e}")
+
+    # 상권 지표 랭킹 재료 (golmok '뜨는 상권' 대응 — build_rankings 주석 참조)
+    rank = build_rankings(sales, pop, store, repo, out)
+    print(f"      랭킹: 상권 {rank['sangwons']:,} · asOf {rank['asOf']}")
 
     # 배후지: 상주·직장인구 블록을 모델 저장소 CSV 로 교체 (rebuild_hinterland 주석 참조)
     hint = rebuild_hinterland(repo, out)

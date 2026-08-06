@@ -33,7 +33,7 @@ import type {
   SafetyScoresResult,
   TopIndustriesResult,
 } from "./contracts";
-import { gradeOf } from "./contracts";
+import { gradeOf, RankingsResult } from "./contracts";
 
 /**
  * 라이브 모델 서버는 **명시적 옵트인**이다 (미설정 = 정적 산출물 사용).
@@ -1266,6 +1266,53 @@ export async function hinterland(sangwonCode: number): Promise<HinterlandResult>
       },
     };
   }
+}
+
+// ------------------------------------------------------------------
+// 상권 지표 랭킹 — golmok '뜨는 상권' 대응 (meta/rankings.json.gz)
+//
+// 값·증감률·lowBase 판정은 export_web_static.py 산출이다. 여기서는 상권
+// 이름·자치구를 조인(표시용)해 내려줄 뿐 수치를 만들지 않는다.
+// 산출물이 없으면 mock 폴백 없이 그대로 실패시킨다 — 랭킹은 리포트가 아니라
+// 탐색 보조라, 예시 순위를 지어내는 것이 정직성 원칙에 더 해롭다.
+// ------------------------------------------------------------------
+let _rankingsCache: RankingsResult | null = null;
+
+export async function rankings(): Promise<RankingsResult> {
+  if (_rankingsCache) return _rankingsCache;
+  const started = Date.now();
+  const file = path.join(EXPORTS_DIR, "meta", "rankings.json.gz");
+  const raw: any = JSON.parse(
+    zlib.gunzipSync(await fs.readFile(file)).toString("utf-8")
+  );
+  const meta = await loadSangwonMeta();
+
+  const rows = Object.entries(raw.bySangwon ?? {}).map(([code, entry]: [string, any]) => {
+    const sw = meta.byCode.get(code);
+    return {
+      code: Number(code),
+      name: sw?.name != null ? String(sw.name) : null,
+      gu: sw?.gu != null ? String(sw.gu) : null,
+      category: sw?.category != null ? String(sw.category) : null,
+      metrics: entry as Record<string, any>,
+    };
+  });
+
+  _rankingsCache = RankingsResult.parse({
+    sourceMode: "file",
+    metrics: raw.metrics ?? {},
+    note: String(raw.note ?? ""),
+    rows,
+    debug: {
+      externalUrl: "file://model-exports/meta/rankings.json.gz",
+      externalRequest: null,
+      externalResponse: { sangwons: rows.length, metrics: Object.keys(raw.metrics ?? {}) },
+      externalStatus: 200,
+      externalDurationMs: Date.now() - started,
+      error: null,
+    },
+  });
+  return _rankingsCache;
 }
 
 export async function safetyScores(): Promise<SafetyScoresResult> {

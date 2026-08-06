@@ -118,6 +118,7 @@
 | `meta/safety-scores.json` | 자치구 25 안전점수+죄종 상세 (서빙 `score_safety_gu` 단일 소스) | ⑥·치안 토글 |
 | `meta/hinterland.json.gz` | 배후지 1,633+ 상권 | ⑦ |
 | `meta/closure-priors.json` | 업종 사전 폐업률 | 라이브 경로 축소추정 |
+| `meta/rankings.json.gz` | 상권 1,650 × 지표 5종 (값·전분기 증감·lowBase 판정) | `/api/rankings` → 초기 화면 '뜨는 상권' (`TrendingPanel`) |
 
 ## 4. 활용 후보 재고 — **2026-08-05 전량 소진**
 

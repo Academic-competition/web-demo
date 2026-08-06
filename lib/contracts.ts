@@ -576,6 +576,60 @@ export const TopIndustriesResult = z.object({
 export type TopIndustriesResult = z.infer<typeof TopIndustriesResult>;
 
 // ------------------------------------------------------------------
+// 상권 지표 랭킹 (golmok '뜨는 상권' 대응 — meta/rankings.json.gz)
+//
+// 값·증감률·소표본 판정(lowBase)은 전부 파이프라인 산출이다.
+// 웹은 지표 토글·정렬·TopN 슬라이스(표시 계층)만 한다 — 수치를 만들지 않는다.
+// ------------------------------------------------------------------
+export const RankingMetricKey = z.enum([
+  "stores",
+  "sales",
+  "footTraffic",
+  "resident",
+  "worker",
+]);
+export type RankingMetricKey = z.infer<typeof RankingMetricKey>;
+
+export const RankingMetricMeta = z.object({
+  label: z.string(),
+  unit: z.string(),
+  /** 집계 기준 — 점포수·매출은 "생활밀접업종 62종 합계" (상권 전체 아님). UI 가 그대로 노출 */
+  scope: z.string(),
+  /** 지표별 기준 분기 — 매출·점포·유동 2025Q2 vs 상주·직장 2026Q1 처럼 다르다 */
+  asOf: z.string(),
+  /** 소표본(lowBase) 판정에 쓴 직전 분기 중앙값 — 근거 표기용 */
+  lowBaseThreshold: z.number().nullable(),
+});
+
+export const RankingEntry = z.object({
+  value: z.number(),
+  prev: z.number().nullable(),
+  /** 직전 분기 대비 % — 직전 값이 없거나 0 이면 null */
+  changePct: z.number().nullable(),
+  /** 직전 분기 값이 전 상권 중앙값 미만 — 증가율 랭킹의 소표본 노이즈 표시용 */
+  lowBase: z.boolean(),
+});
+export type RankingEntry = z.infer<typeof RankingEntry>;
+
+export const RankingRow = z.object({
+  code: z.number(),
+  name: z.string().nullable(),
+  gu: z.string().nullable(),
+  category: z.string().nullable(),
+  metrics: z.record(z.string(), RankingEntry),
+});
+export type RankingRow = z.infer<typeof RankingRow>;
+
+export const RankingsResult = z.object({
+  sourceMode: SourceMode,
+  metrics: z.record(z.string(), RankingMetricMeta),
+  note: z.string(),
+  rows: z.array(RankingRow),
+  debug: DebugTrace.nullable().optional(),
+});
+export type RankingsResult = z.infer<typeof RankingsResult>;
+
+// ------------------------------------------------------------------
 // 신호등 판정 (서버 전용 — ANSWERS.md Q6 권장 문턱값)
 // ------------------------------------------------------------------
 export const GRADE_THRESHOLDS = { safe: 0.6, caution: 0.45 } as const;

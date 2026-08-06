@@ -10,6 +10,7 @@ const nextConfig: NextConfig = {
     "/api/top-industries": ["./model-exports/**/*"],
     "/api/safety": ["./model-exports/**/*"],
     "/api/hinterland": ["./model-exports/**/*"],
+    "/api/rankings": ["./model-exports/**/*"],
   },
 };
 

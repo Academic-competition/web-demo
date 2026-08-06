@@ -21,6 +21,7 @@ import RecentHistory from "@/components/RecentHistory";
 import ComparePanel from "@/components/ComparePanel";
 import TopIndustriesPanel from "@/components/TopIndustriesPanel";
 import TopSangwonsPanel from "@/components/TopSangwonsPanel";
+import TrendingPanel from "@/components/TrendingPanel";
 import {
   clearHistory,
   getHistoryServerSnapshot,
@@ -36,6 +37,7 @@ import {
   useHeatmap,
   useHinterland,
   useMeta,
+  useRankings,
   useSafetyScores,
   useTopIndustries,
 } from "@/lib/hooks";
@@ -95,6 +97,9 @@ export default function Home() {
   const topIndustries = useTopIndustries(selectedCode);
   // 배후지 실측 — 리포트 ⑦ (분석이 열렸을 때만 로드)
   const hinterlandQ = useHinterland(analyze.data ? analyze.data.sangwon.code : null);
+  // 뜨는 상권 랭킹 — 초기·대기 화면에서만 필요하지만 파일 캐시라 상시 로드해도 가볍다.
+  // 분석이 열려 있으면 패널이 안 보이므로 enabled 를 조여 초기 페인트를 아낀다.
+  const rankingsQ = useRankings(!analyze.data);
 
   // ── 상권 비교 바스켓 (golmok '비교담기' 벤치마크) ────────────────────
   // 담는 단위는 (상권 × 업종) 조합 — 같은 업종 다른 상권도, 같은 상권 다른 업종도 담긴다.
@@ -657,6 +662,16 @@ export default function Home() {
                 onPick={handlePickHistory}
                 onClear={clearHistory}
               />
+              {/* 뜨는 상권 — 아무것도 안 고른 사람에게 탐색 시작점을 준다 (golmok 대응) */}
+              {rankingsQ.data && (
+                <TrendingPanel
+                  data={rankingsQ.data}
+                  onPick={(code) => {
+                    setOnboarded(true);
+                    handleSelectSangwon(code);
+                  }}
+                />
+              )}
             </>
           ) : (
             <>
@@ -666,6 +681,9 @@ export default function Home() {
                 onPick={handlePickHistory}
                 onClear={clearHistory}
               />
+              {rankingsQ.data && (
+                <TrendingPanel data={rankingsQ.data} onPick={handleSelectSangwon} />
+              )}
             </>
           )}
         </div>

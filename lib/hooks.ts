@@ -12,6 +12,7 @@ import type {
   HeatmapResult,
   HinterlandResult,
   MetaResult,
+  RankingsResult,
   SafetyScoresResult,
   SourceMode,
   TopIndustriesResult,
@@ -63,6 +64,32 @@ export function useCompare(items: { sangwonCode: number; industryCode: string }[
       },
       staleTime: 5 * 60 * 1000,
     })),
+  });
+}
+
+/**
+ * 상권 지표 랭킹 — 초기 화면의 '뜨는 상권' 패널 (golmok 대응).
+ * 값·증감·lowBase 는 파이프라인 산출 — 프론트는 정렬·TopN 슬라이스만 한다.
+ * 실패 시 패널을 숨긴다 (목업 순위를 지어내지 않는다).
+ */
+export function useRankings(enabled: boolean) {
+  return useQuery<RankingsResult>({
+    queryKey: ["rankings"],
+    queryFn: async () => {
+      const started = Date.now();
+      const res = await fetch("/api/rankings");
+      if (!res.ok) throw new Error("상권 랭킹 로드 실패");
+      const data: RankingsResult = await res.json();
+      inspect(
+        "file",
+        `GET /api/rankings — 상권 ${data.rows.length}개 × 지표 ${Object.keys(data.metrics).length}종 (${data.sourceMode})`,
+        data.debug ?? { sourceMode: data.sourceMode },
+        Date.now() - started
+      );
+      return data;
+    },
+    enabled,
+    staleTime: 30 * 60 * 1000, // 정적 산출물 — 세션 내 재요청 불필요
   });
 }
 
