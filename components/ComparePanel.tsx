@@ -10,7 +10,7 @@
  *     - 비교 전용 집계가 필요하면 모델/서빙에 요청한다. 산식이 웹에 생기면
  *       리포트와 비교 화면의 숫자가 갈라진다 (치안 산식에서 실제로 겪은 문제)
  */
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
 import type { AnalyzeResult } from "@/lib/contracts";
 import { formatKRW, formatPeople } from "@/lib/format";
 
@@ -235,34 +235,47 @@ export default function ComparePanel({
   loadingCount,
   onRemove,
   onClear,
+  alwaysOpen = false,
 }: {
   results: AnalyzeResult[];
   loadingCount: number;
   onRemove: (sangwonCode: number, industryCode: string) => void;
   onClear: () => void;
+  /** 비교함 전용 메뉴에서는 접을 이유가 없다 — 항상 펼침 */
+  alwaysOpen?: boolean;
 }) {
+  // 기본 접힘 (8/7 피드백) — 리포트 위에 17행 표가 통째로 서 있으면 정작
+  // 보고서가 눈에 안 들어온다. 담긴 조합 요약만 한 줄로 보여주고 펼쳐야 표가 나온다.
+  const [openState, setOpen] = useState(false);
+  const open = alwaysOpen || openState;
+
   if (results.length === 0 && loadingCount === 0) return null;
 
   const groups = [...new Set(ROWS.map((r) => r.group))];
 
   return (
-    <section className="rise-in rounded-xl border border-gold/30 bg-ink-800/60 px-4 py-3.5">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <h3 className="text-[13px] font-semibold text-fg">상권 비교</h3>
-          <span className="text-[10px] text-faint">
-            · 분석 리포트와 같은 값 (새로 계산하지 않음)
+    <section className="rise-in rounded-xl border border-gold/30 bg-ink-800/60 px-4 py-3">
+      <div className="flex items-center justify-between gap-2">
+        <button onClick={() => setOpen(!open)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
+          <h3 className="shrink-0 text-[13px] font-semibold text-fg">상권 비교 {results.length}건</h3>
+          <span className="min-w-0 truncate text-[10.5px] text-muted">
+            {results.map((r) => r.sangwon.name ?? r.sangwon.code).join(" · ")}
+            {loadingCount > 0 && ` (+${loadingCount} 로딩)`}
           </span>
-        </div>
+          {!alwaysOpen && (
+            <span className="shrink-0 text-[10px] text-gold-soft">{open ? "접기 ▴" : "비교표 펼치기 ▾"}</span>
+          )}
+        </button>
         <button
           onClick={onClear}
-          className="rounded border border-line px-2 py-0.5 text-[10px] text-muted transition hover:border-risk/50 hover:text-risk"
+          className="shrink-0 rounded border border-line px-2 py-0.5 text-[10px] text-muted transition hover:border-risk/50 hover:text-risk"
         >
-          전체 비우기
+          비우기
         </button>
       </div>
 
-      <div className="overflow-x-auto">
+      {open && (
+      <div className="mt-3 overflow-x-auto">
         <table className="w-full min-w-[520px] border-collapse text-left">
           <thead>
             <tr>
@@ -332,11 +345,14 @@ export default function ComparePanel({
           </tbody>
         </table>
       </div>
+      )}
 
-      <p className="mt-2.5 text-[9.5px] leading-relaxed text-faint">
-        각 칸은 해당 상권의 분석 리포트에 있는 값을 그대로 옮긴 것입니다 (항목명에 마우스를 올리면
-        출처 필드가 보입니다). 비교를 위한 별도 계산·가중치는 쓰지 않았습니다.
-      </p>
+      {open && (
+        <p className="mt-2.5 text-[9.5px] leading-relaxed text-faint">
+          각 칸은 해당 상권의 분석 리포트에 있는 값을 그대로 옮긴 것입니다 (항목명에 마우스를 올리면
+          출처 필드가 보입니다). 비교를 위한 별도 계산·가중치는 쓰지 않았습니다.
+        </p>
+      )}
     </section>
   );
 }

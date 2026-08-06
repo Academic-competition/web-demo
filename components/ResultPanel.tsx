@@ -291,6 +291,10 @@ function SectionNav() {
       (e): e is HTMLElement => !!e
     );
     if (!els.length) return;
+    // ⚠️ root 필수 — 리포트는 viewport 가 아니라 .panel-scroll 컨테이너 안에서
+    // 스크롤된다. root 를 안 주면 관찰 기준이 viewport 가 되어 하이라이트가
+    // 스크롤을 따라가지 않는다 (실제 발생했던 버그).
+    const scrollRoot = els[0].closest(".panel-scroll");
     const io = new IntersectionObserver(
       (entries) => {
         const top = entries
@@ -298,7 +302,7 @@ function SectionNav() {
           .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
         if (top) setActive(Number(top.target.id.replace("report-sec-", "")));
       },
-      { rootMargin: "-8% 0px -70% 0px", threshold: 0 }
+      { root: scrollRoot, rootMargin: "-8% 0px -70% 0px", threshold: 0 }
     );
     els.forEach((e) => io.observe(e));
     return () => io.disconnect();
@@ -345,18 +349,22 @@ function Section({
   return (
     <section
       id={`report-sec-${n}`}
-      className={`rise-in scroll-mt-3 rounded-xl border border-line/60 bg-ink-800/40 px-5 py-4 ${className}`}
+      // 섹션 사이가 붙어 보인다는 피드백(8/7) — 배경·보더 대비를 올리고 상단에
+      // 골드 헤어라인을 둬 "여기서 새 섹션"이 스크롤 중에도 잡히게 한다
+      className={`rise-in scroll-mt-3 rounded-xl border border-line/80 bg-ink-800/60 px-5 py-5 shadow-[inset_0_1px_0_0_rgba(227,182,90,0.14)] ${className}`}
     >
-      <div className="mb-3 flex items-center gap-2">
+      <div className="mb-4 flex items-center gap-2.5">
         <span
-          className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-gold/15 text-[11px] font-semibold text-gold"
+          className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gold/20 text-[12px] font-bold text-gold"
           style={{ fontFamily: "var(--font-numeric)" }}
         >
           {n}
         </span>
-        <h3 className="text-[13px] font-semibold text-fg">{title}</h3>
+        <h3 className="font-[family-name:var(--font-display)] text-[15px] font-semibold tracking-tight text-fg">
+          {title}
+        </h3>
         {aside && <span className="text-[10px] text-faint">· {aside}</span>}
-        <span className="h-px flex-1 bg-line/60" />
+        <span className="h-px flex-1 bg-gradient-to-r from-gold/30 to-transparent" />
       </div>
       {children}
     </section>
@@ -497,7 +505,7 @@ export default function ResultPanel({
   const detail = result.detail ?? null;
 
   return (
-    <div className="space-y-3.5">
+    <div className="space-y-5">
       {/* ── 리포트 헤더 (종합 판정) ─────────────────────── */}
       <header
         className={`rise-in rounded-xl border bg-gradient-to-br from-ink-800/80 to-ink-800/30 px-5 py-4 ${v ? v.ring : "border-line/60"}`}

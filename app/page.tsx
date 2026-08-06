@@ -45,12 +45,15 @@ import {
 import { inspect } from "@/lib/inspector";
 
 type Mode = "location" | "industry";
+/** 대메뉴 — 한 패널 과밀 해소 (golmok 의 메뉴 분리 패턴). 지도는 공유한다 */
+type View = "analyze" | "trending" | "compare";
 
 export default function Home() {
   const meta = useMeta();
   const analyze = useAnalyze();
 
   const [mode, setMode] = useState<Mode>("location");
+  const [view, setView] = useState<View>("analyze");
   /** 질문형 온보딩에 응답했는지 — 응답 전까지만 시작 카드를 보여준다 */
   const [onboarded, setOnboarded] = useState(false);
   const [industryCode, setIndustryCode] = useState<string>("");
@@ -388,7 +391,7 @@ export default function Home() {
       </main>
 
       {/* ── 우: 컨트롤 + 결과 패널 ──────────────────────── */}
-      <aside className="panel-texture flex min-h-0 w-full flex-1 shrink-0 flex-col border-t border-line/70 bg-ink-900 lg:w-[440px] lg:flex-none lg:border-l lg:border-t-0">
+      <aside className="panel-texture flex min-h-0 w-full flex-1 shrink-0 flex-col border-t border-line/70 bg-ink-900 lg:w-[520px] lg:flex-none lg:border-l lg:border-t-0 xl:w-[560px]">
         {/* 브랜드 */}
         <header className="border-b border-line/60 px-6 pb-4 pt-5">
           <div className="flex items-baseline justify-between">
@@ -402,9 +405,37 @@ export default function Home() {
           <p className="mt-1 text-[11px] leading-relaxed text-muted">
             &ldquo;이 자리에 이 업종, 들어가도 될까?&rdquo; — 실측 생존율과 AI 매출 예측으로 답합니다
           </p>
+
+          {/* 대메뉴 (8/7 피드백) — 한 패널이 랭킹·비교·리포트를 다 떠안아 복잡하다는
+              지적. golmok 처럼 화면을 메뉴로 분리한다: 분석 / 뜨는 상권 / 비교 */}
+          <nav className="mt-3 flex gap-1 rounded-xl border border-line/70 bg-ink-800/70 p-1">
+            {(
+              [
+                ["analyze", "상권 분석"],
+                ["trending", "뜨는 상권"],
+                ["compare", "비교함"],
+              ] as const
+            ).map(([v, label]) => (
+              <button
+                key={v}
+                onClick={() => setView(v)}
+                className={`flex-1 rounded-lg px-3 py-2 text-center text-[13px] font-semibold transition ${
+                  view === v ? "bg-ink-600 text-gold-soft shadow-inner" : "text-fg opacity-55 hover:opacity-90"
+                }`}
+              >
+                {label}
+                {v === "compare" && compareItems.length > 0 && (
+                  <span className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-gold/20 px-1 text-[10px] text-gold">
+                    {compareItems.length}
+                  </span>
+                )}
+              </button>
+            ))}
+          </nav>
         </header>
 
-        {/* 모드 토글 */}
+        {/* 모드 토글 — 분석 메뉴에서만 (진입 방식 선택) */}
+        {view === "analyze" && (
         <div className="px-6 pt-4">
           <div className="grid grid-cols-2 gap-1 rounded-xl border border-line/70 bg-ink-800/70 p-1">
             {(
@@ -430,9 +461,10 @@ export default function Home() {
             ))}
           </div>
         </div>
+        )}
 
-        {/* 조건 입력 */}
-        <div className="space-y-3 px-6 py-4">
+        {/* 조건 입력 — 분석 메뉴 전용 */}
+        <div className={view === "analyze" ? "space-y-3 px-6 py-4" : "hidden"}>
           {(mode === "industry" || rankingUnavailable) && (
             <div>
               <label className="mb-1.5 block text-[11px] font-medium text-muted">
@@ -563,8 +595,48 @@ export default function Home() {
           )}
         </div>
 
-        {/* 결과 영역 */}
-        <div className="panel-scroll flex-1 space-y-3.5 overflow-y-auto px-6 pb-4">
+        {/* 결과 영역 — 대메뉴(view)별로 한 가지 일만 한다 */}
+        <div className="panel-scroll flex-1 space-y-3.5 overflow-y-auto px-6 pb-4 pt-1">
+          {view === "trending" ? (
+            /* ── 뜨는 상권 메뉴 — 랭킹이 주인공. 행 클릭 = 분석 메뉴로 전환 ── */
+            rankingsQ.data ? (
+              <TrendingPanel
+                data={rankingsQ.data}
+                onPick={(code) => {
+                  setView("analyze");
+                  setOnboarded(true);
+                  switchMode("location");
+                  handleSelectSangwon(code);
+                }}
+              />
+            ) : (
+              <p className="pt-8 text-center text-sm text-faint">랭킹을 불러오는 중…</p>
+            )
+          ) : view === "compare" ? (
+            /* ── 비교함 메뉴 — 담긴 조합의 표. 리포트 흐름과 분리 (8/7 피드백) ── */
+            compareResults.length > 0 || compareLoading > 0 ? (
+              <ComparePanel
+                alwaysOpen
+                results={compareResults}
+                loadingCount={compareLoading}
+                onRemove={(s, i) => toggleCompare(s, i)}
+                onClear={() => {
+                  inspect("res", "비교 목록 비움");
+                  setCompareItems([]);
+                }}
+              />
+            ) : (
+              <div className="rounded-xl border border-line/60 bg-ink-800/40 px-5 py-8 text-center text-sm leading-relaxed text-muted">
+                아직 비교에 담긴 상권이 없습니다.
+                <br />
+                <span className="text-[12px] text-faint">
+                  상권 분석 리포트 상단의 <b className="text-gold-soft">비교에 담기</b>로
+                  최대 3개까지 담아 나란히 볼 수 있습니다.
+                </span>
+              </div>
+            )
+          ) : (
+          <>
           {/* 주변 상권 (반경 필터) — 지도 클릭/검색 지점이 있을 때, 위치 먼저 모드 한정.
               golmok '나는 사장' 분석영역(반경) 대응 — 재집계 없이 목록 → 개별 리포트 */}
           {mode === "location" && pickedPoint && (
@@ -575,16 +647,6 @@ export default function Home() {
               onPick={handleSelectSangwon}
             />
           )}
-          {/* 비교 바스켓 — 담긴 게 있으면 리포트 위에 항상 보인다 (golmok compare_analysis) */}
-          <ComparePanel
-            results={compareResults}
-            loadingCount={compareLoading}
-            onRemove={(s, i) => toggleCompare(s, i)}
-            onClear={() => {
-              inspect("res", "비교 목록 비움");
-              setCompareItems([]);
-            }}
-          />
           {analyze.isPending ? (
             <LoadingState />
           ) : analyze.isError ? (
@@ -673,16 +735,14 @@ export default function Home() {
                 onPick={handlePickHistory}
                 onClear={clearHistory}
               />
-              {/* 뜨는 상권 — 아무것도 안 고른 사람에게 탐색 시작점을 준다 (golmok 대응) */}
-              {rankingsQ.data && (
-                <TrendingPanel
-                  data={rankingsQ.data}
-                  onPick={(code) => {
-                    setOnboarded(true);
-                    handleSelectSangwon(code);
-                  }}
-                />
-              )}
+              {/* 뜨는 상권 랭킹은 전용 메뉴로 이동 (8/7) — 여기서는 안내만 */}
+              <button
+                onClick={() => setView("trending")}
+                className="w-full rounded-xl border border-line/60 bg-ink-800/40 px-4 py-3 text-left text-[12px] text-muted transition hover:border-gold/50 hover:text-fg"
+              >
+                어디부터 볼지 모르겠다면 → <b className="text-gold-soft">뜨는 상권 TOP 10</b> 메뉴에서
+                지표별 랭킹으로 시작하세요
+              </button>
             </>
           ) : (
             <>
@@ -692,10 +752,9 @@ export default function Home() {
                 onPick={handlePickHistory}
                 onClear={clearHistory}
               />
-              {rankingsQ.data && (
-                <TrendingPanel data={rankingsQ.data} onPick={handleSelectSangwon} />
-              )}
             </>
+          )}
+          </>
           )}
         </div>
 
