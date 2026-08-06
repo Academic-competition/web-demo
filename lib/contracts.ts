@@ -616,15 +616,30 @@ export const RankingRow = z.object({
   name: z.string().nullable(),
   gu: z.string().nullable(),
   category: z.string().nullable(),
+  /** 소속 행정동 코드 — '뜨는 동네' 드릴다운 필터용. 서빙에 없는 상권은 null */
+  dongCode: z.number().nullable(),
   metrics: z.record(z.string(), RankingEntry),
 });
 export type RankingRow = z.infer<typeof RankingRow>;
+
+/**
+ * 행정동 랭킹 행 — 상권 값의 합산 (export 산출).
+ * 키가 이름이 아니라 코드인 이유: 신사동은 서울에 관악구·강남구 두 곳이다.
+ */
+export const RankingDongRow = z.object({
+  code: z.number(),
+  name: z.string().nullable(),
+  gu: z.string().nullable(),
+  metrics: z.record(z.string(), RankingEntry),
+});
+export type RankingDongRow = z.infer<typeof RankingDongRow>;
 
 export const RankingsResult = z.object({
   sourceMode: SourceMode,
   metrics: z.record(z.string(), RankingMetricMeta),
   note: z.string(),
   rows: z.array(RankingRow),
+  dongs: z.array(RankingDongRow),
   debug: DebugTrace.nullable().optional(),
 });
 export type RankingsResult = z.infer<typeof RankingsResult>;

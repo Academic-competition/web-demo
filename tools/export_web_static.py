@@ -292,12 +292,16 @@ def load_safety_by_gu(repo: str, sv) -> tuple[dict, dict]:
     return detail_by_gu, scores_meta
 
 
-def build_rankings(sales, pop, store, repo: str, out: str) -> dict:
+def build_rankings(sales, pop, store, sv, repo: str, out: str) -> dict:
     """
-    상권 단위 지표 랭킹 재료 — golmok '뜨는 상권' 대응 (2026-08-06).
+    상권·행정동 지표 랭킹 재료 — golmok '뜨는 상권/뜨는 동네' 대응 (2026-08-06).
 
     지표 5종(점포수·매출·유동인구·상주인구·직장인구)의 상권별
     {value, prev, changePct} 를 meta/rankings.json.gz 로 내보낸다.
+    행정동(byDong)은 상권 값을 서빙 테이블의 상권→행정동 매핑으로 **합산**한 것.
+    행정동 키는 이름이 아니라 코드다 — 신사동처럼 서울 안에서 이름이 중복된다
+    (강남구/은평구). 서빙에 없는 상권(원본에만 있는 ~80개)은 매핑이 없어
+    동 집계에서 빠진다.
     **정렬·순위 매기기는 웹 표시 계층 몫** — 여기서는 값만 준다.
     (합계·증감률 '산출'은 데이터 가공층인 이 스크립트 책임 — 웹이 수치를
     만들지 않는 원칙의 경계가 여기다. ComparePanel 설계 제약과 동일.)
@@ -350,10 +354,51 @@ def build_rankings(sales, pop, store, repo: str, out: str) -> dict:
         ("worker", (worker, "TOT_WRC_POPLTN_CO", False), "직장인구", "명", "상권 전체"),
     ]
 
+    # 상권 → 행정동·자치구 매핑 (서빙 테이블, 상권 중복 제거)
+    _sw = sv.drop_duplicates("상권_코드").set_index("상권_코드")
+    dong_of = {int(c): (int(num(r["행정동_코드"])), str(r["행정동_코드_명"]), str(r["자치구_코드_명"]))
+               for c, r in _sw[["행정동_코드", "행정동_코드_명", "자치구_코드_명"]].iterrows()
+               if num(r["행정동_코드"]) is not None}
+    dong_name = {dc: (n, g) for _, (dc, n, g) in dong_of.items()}
+
     by_sangwon: dict[str, dict] = {}
+    by_dong: dict[str, dict] = {}
     metrics_meta: dict[str, dict] = {}
     for key, (df, col, agg), label, unit, scope in metric_defs:
         cur, prv, asof = per_sangwon(df, col, agg)
+
+        # ---- 행정동 집계: 상권 값을 매핑으로 합산한 뒤 상권과 같은 방식으로 판정 ----
+        d_cur: dict[int, float] = {}
+        d_prv: dict[int, float] = {}
+        for code, v in cur.items():
+            m = dong_of.get(int(code))
+            if m is None or num(v) is None:
+                continue
+            d_cur[m[0]] = d_cur.get(m[0], 0) + float(v)
+        for code, v in prv.items():
+            m = dong_of.get(int(code))
+            if m is None or num(v) is None:
+                continue
+            d_prv[m[0]] = d_prv.get(m[0], 0) + float(v)
+        d_prev_median = (sorted(d_prv.values())[len(d_prv) // 2] if d_prv else 0.0)
+        for dcode, v in d_cur.items():
+            value = num(v)
+            if value is None:
+                continue
+            prev = num(d_prv.get(dcode))
+            name_gu = dong_name.get(dcode)
+            entry = by_dong.setdefault(str(int(dcode)), {
+                "name": name_gu[0] if name_gu else None,
+                "gu": name_gu[1] if name_gu else None,
+                "metrics": {},
+            })
+            entry["metrics"][key] = {
+                "value": value,
+                "prev": prev,
+                "changePct": (round((value - prev) / prev * 100, 2)
+                              if prev is not None and prev > 0 else None),
+                "lowBase": (prev is None or prev < d_prev_median),
+            }
         # 소표본 판정 기준 — golmok 은 "돈암1동 커피 5만원 +326%" 같은 소표본 노이즈가
         # 증가율 랭킹 상위를 점령했다 (벤치마크 실측). 직전 분기 값이 전 상권 중앙값
         # 미만이면 lowBase 로 표시해 UI 가 기본 제외하고 그 사실을 밝히게 한다.
@@ -375,14 +420,20 @@ def build_rankings(sales, pop, store, repo: str, out: str) -> dict:
                 "lowBase": (prev is None or prev < prev_median),
             }
 
+    # 드릴다운(동네 → 상권)용 — 상권이 속한 행정동 코드
+    dong_code_of_sangwon = {str(c): m[0] for c, m in dong_of.items()}
+
     doc = {
         "metrics": metrics_meta,
-        "note": "상권 단위 지표 랭킹 재료. 값·증감률은 파이프라인 산출이며 "
-                "웹은 정렬·표시만 한다. 점포수·매출은 생활밀접업종 62종 합계 기준.",
+        "note": "상권·행정동 지표 랭킹 재료. 값·증감률은 파이프라인 산출이며 "
+                "웹은 정렬·표시만 한다. 점포수·매출은 생활밀접업종 62종 합계 기준. "
+                "행정동은 상권 값의 합산 — 서빙에 없는 상권은 동 집계에서 제외.",
         "bySangwon": by_sangwon,
+        "sangwonDong": dong_code_of_sangwon,
+        "byDong": by_dong,
     }
     write_json_gz(os.path.join(out, "meta", "rankings.json.gz"), doc)
-    return {"sangwons": len(by_sangwon),
+    return {"sangwons": len(by_sangwon), "dongs": len(by_dong),
             "asOf": "/".join(m["asOf"] for m in metrics_meta.values())}
 
 
@@ -816,8 +867,8 @@ def main() -> int:
         print(f"      ⚠️ 치안 생략 (data/raw/external/ 없음?): {e}")
 
     # 상권 지표 랭킹 재료 (golmok '뜨는 상권' 대응 — build_rankings 주석 참조)
-    rank = build_rankings(sales, pop, store, repo, out)
-    print(f"      랭킹: 상권 {rank['sangwons']:,} · asOf {rank['asOf']}")
+    rank = build_rankings(sales, pop, store, sv, repo, out)
+    print(f"      랭킹: 상권 {rank['sangwons']:,} · 행정동 {rank['dongs']:,} · asOf {rank['asOf']}")
 
     # 배후지: 상주·직장인구 블록을 모델 저장소 CSV 로 교체 (rebuild_hinterland 주석 참조)
     hint = rebuild_hinterland(repo, out)

@@ -32,6 +32,8 @@
    숫자 근거가 필요할 때
 3. [BENCHMARK-golmok.md](BENCHMARK-golmok.md) — 서울시 공식 서비스(골목상권) 실탐색 기록.
    "기존 서비스와 뭐가 다른가"에 답할 때
+4. [GOLMOK-PARITY.md](GOLMOK-PARITY.md) — **golmok 기능 커버리지 총괄표** (기능 × 필요
+   데이터 × 가능/불가). 기능 추가 작업의 백로그이자 "왜 없나"의 답변 자료
 
 ### 모델 저장소를 처음 본다
 

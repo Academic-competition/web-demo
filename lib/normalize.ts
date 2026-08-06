@@ -1287,6 +1287,7 @@ export async function rankings(): Promise<RankingsResult> {
   );
   const meta = await loadSangwonMeta();
 
+  const dongOf: Record<string, number> = raw.sangwonDong ?? {};
   const rows = Object.entries(raw.bySangwon ?? {}).map(([code, entry]: [string, any]) => {
     const sw = meta.byCode.get(code);
     return {
@@ -1294,19 +1295,31 @@ export async function rankings(): Promise<RankingsResult> {
       name: sw?.name != null ? String(sw.name) : null,
       gu: sw?.gu != null ? String(sw.gu) : null,
       category: sw?.category != null ? String(sw.category) : null,
+      dongCode: dongOf[code] != null ? Number(dongOf[code]) : null,
       metrics: entry as Record<string, any>,
     };
   });
+  const dongs = Object.entries(raw.byDong ?? {}).map(([code, entry]: [string, any]) => ({
+    code: Number(code),
+    name: entry?.name != null ? String(entry.name) : null,
+    gu: entry?.gu != null ? String(entry.gu) : null,
+    metrics: (entry?.metrics ?? {}) as Record<string, any>,
+  }));
 
   _rankingsCache = RankingsResult.parse({
     sourceMode: "file",
     metrics: raw.metrics ?? {},
     note: String(raw.note ?? ""),
     rows,
+    dongs,
     debug: {
       externalUrl: "file://model-exports/meta/rankings.json.gz",
       externalRequest: null,
-      externalResponse: { sangwons: rows.length, metrics: Object.keys(raw.metrics ?? {}) },
+      externalResponse: {
+        sangwons: rows.length,
+        dongs: dongs.length,
+        metrics: Object.keys(raw.metrics ?? {}),
+      },
       externalStatus: 200,
       externalDurationMs: Date.now() - started,
       error: null,
