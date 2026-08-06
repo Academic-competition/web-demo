@@ -117,7 +117,7 @@ export default function TopSangwonsPanel({
                   {cell.gu}
                   {/* 매출 지표일 땐 우측 값이 이미 금액이라 중복 표기를 피한다 */}
                   {metric !== "sales" && cell.monthlyEstimateKRW != null && (
-                    <> · 예상매출 {formatKRWCompactLocal(cell.monthlyEstimateKRW)}</>
+                    <> · 분기 예상매출 {formatKRWCompactLocal(cell.monthlyEstimateKRW)}</>
                   )}
                 </span>
               </span>

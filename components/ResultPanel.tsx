@@ -592,9 +592,12 @@ export default function ResultPanel({
         )}
         {result.revenue && (
           <StatTile
-            label="예상 월매출"
+            // "월매출" 라벨은 3배 부풀린 거짓이었다 (2026-08-07 실증) — 원천
+            // 당월_매출_금액이 분기 합계다. 이문1동 한식 점포당 값 ÷3 이 golmok
+            // 월평균(1,454만)과 일치. 분기로 표기하고 월평균 환산을 병기한다
+            label="예상 매출 (분기)"
             value={formatKRW(result.revenue.monthlyEstimateKRW)}
-            hint={result.revenue.scaleLabel}
+            hint={`월평균 약 ${formatKRW(result.revenue.monthlyEstimateKRW / 3)} · ${result.revenue.scaleLabel}`}
           />
         )}
         {pct != null && (
@@ -632,7 +635,8 @@ export default function ResultPanel({
           )}
           {result.revenue && (
             <Bullet tag="매출">
-              예상 월매출 <b className="text-fg">{formatKRW(result.revenue.monthlyEstimateKRW)}</b>
+              예상 분기 매출 <b className="text-fg">{formatKRW(result.revenue.monthlyEstimateKRW)}</b>
+              <span className="text-muted"> (월평균 약 {formatKRW(result.revenue.monthlyEstimateKRW / 3)})</span>
               {pct != null && (
                 <>
                   {" "}— 동일 업종 상권 중 <b className="text-gold">{topPctLabel(pct)}</b>

@@ -74,9 +74,15 @@ const ROWS: Row[] = [
   // ── 매출 ─────────────────────────────────────────────
   {
     group: "매출",
-    label: "예상 매출 (점포당)",
+    label: "예상 분기 매출 (점포당)",
     from: "revenue.monthlyEstimateKRW",
-    cell: (r) => (r.revenue ? { text: formatKRW(r.revenue.monthlyEstimateKRW) } : EMPTY),
+    cell: (r) =>
+      r.revenue
+        ? {
+            text: formatKRW(r.revenue.monthlyEstimateKRW),
+            sub: `월평균 약 ${formatKRW(r.revenue.monthlyEstimateKRW / 3)}`,
+          }
+        : EMPTY,
   },
   {
     group: "매출",

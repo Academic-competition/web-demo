@@ -80,6 +80,12 @@ export const RevenueAccuracy = z.object({
 export type RevenueAccuracy = z.infer<typeof RevenueAccuracy>;
 
 export const RevenuePayload = z.object({
+  /**
+   * ⚠️ 필드명과 달리 **분기(3개월) 합계**다 — 2026-08-07 실증
+   * (원천 당월_매출_금액 ÷3 = golmok 점포당 월평균과 일치).
+   * 이름을 바꾸면 정적 번들·라이브 매퍼가 같이 움직여야 해서 유지하되,
+   * UI 라벨은 반드시 "분기"로 쓰고 월평균은 ÷3 환산으로 병기한다.
+   */
   monthlyEstimateKRW: z.number(),
   /** 같은 업종 내 전체 상권 대비 백분위 (0~100) */
   percentileInSangwon: z.number().min(0).max(100).nullable(),
@@ -555,7 +561,8 @@ export type MetaResult = z.infer<typeof MetaResult>;
 export const TopIndustry = z.object({
   code: z.string(),
   name: z.string().nullable(),
-  /** 상권×업종 전체 점포 합산 예상 월매출 */
+  /** 점포당 예측 매출 — **분기** 합계 (RevenuePayload.monthlyEstimateKRW 주석 참조).
+   *  구 주석의 "합산 월매출"은 v1 잔재 — 지금 export 는 predicted_sales_per_store 를 싣는다 */
   monthlyEstimateKRW: z.number(),
   /** 같은 업종 내 전체 상권 대비 백분위 (0~100) */
   salesPercentile: z.number().min(0).max(100).nullable(),

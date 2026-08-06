@@ -204,7 +204,8 @@ export default function TopIndustriesPanel({
                 {r.name ?? r.code}
               </span>
               <span className="text-[10.5px] text-faint">
-                예상매출 {formatKRW(r.monthlyEstimateKRW)}
+                {/* 분기 값 — "월매출" 라벨 3배 착시 정정 (2026-08-07, ResultPanel KPI 주석) */}
+                분기 예상매출 {formatKRW(r.monthlyEstimateKRW)}
                 {r.storeCount != null && <> · 점포 {r.storeCount}개</>}
                 {r.survivalProbability != null && (
                   <> · 생존 {(r.survivalProbability * 100).toFixed(0)}%</>
@@ -230,7 +231,7 @@ export default function TopIndustriesPanel({
                   >
                     {formatKRW(r.monthlyEstimateKRW)}
                   </span>
-                  <span className="text-[9px] text-faint">예상 월매출</span>
+                  <span className="text-[9px] text-faint">예상 매출 (분기)</span>
                 </>
               )}
             </span>

@@ -210,11 +210,15 @@ function survivalFromClosure(
  */
 const REVENUE_SCALE_NOTE_PER_STORE =
   "동일 업종 점포 1곳의 평균 규모 예측값입니다 (상권 전체 합산 아님). " +
-  "기간 기준은 원천 데이터의 '당월' 정의를 따르며 확정되지 않았습니다. " +
+  // 기간은 오래 "미확정"이었는데 2026-08-07 실증으로 분기 합계로 확정했다:
+  // 원천 당월_매출_금액 ÷ 점포수를 3으로 나누면 서울시 공식 서비스(golmok)의
+  // '점포당 월평균'과 일치한다 (이문1동 한식 747만~1,859만 vs golmok 1,454만).
+  // 이 문구를 '월'로 되돌리면 3배 부풀린 거짓 표기가 된다.
+  "기간은 분기(3개월) 합계 기준입니다 — 월평균은 3으로 나눈 환산값입니다. " +
   "프랜차이즈와 독립 점포를 모두 포함한 평균이므로, " +
   "프랜차이즈 비중이 큰 업종에서는 독립 점포의 실제 매출과 다를 수 있습니다.";
 /** KPI 타일·요약용 짧은 라벨 — 위 scaleNote 와 항상 같은 의미를 유지할 것 */
-const REVENUE_SCALE_LABEL_PER_STORE = "점포당 평균";
+const REVENUE_SCALE_LABEL_PER_STORE = "점포당 평균 · 분기";
 
 const CONFIDENCE_LEVELS = new Set(["high", "medium", "low"]);
 
