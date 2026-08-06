@@ -25,6 +25,11 @@ const TOOLTIP_STYLE = {
   fontSize: 12,
   color: "#e9edf6",
 };
+// ⚠️ contentStyle 은 박스에만 적용된다 — 항목 텍스트는 itemStyle 이 없으면
+// 시리즈 색(#3a486e, 어두운 네이비)을 그대로 써서 다크 배경에 묻힌다 (8/7 피드백).
+// 라벨(첫 줄)도 기본 회색이라 함께 지정한다. 세 Tooltip 모두 이 쌍을 쓸 것.
+const TOOLTIP_ITEM_STYLE = { color: "#e9edf6" };
+const TOOLTIP_LABEL_STYLE = { color: "#8b93ab", marginBottom: 2 };
 
 // ------------------------------------------------------------------
 // 비중 바 차트 (요일/시간대/연령 — 최댓값 골드 하이라이트)
@@ -47,6 +52,8 @@ export function SliceBarChart({ data }: { data: RatioSlice[] }) {
           <Tooltip
             cursor={{ fill: "rgba(255,255,255,0.04)" }}
             contentStyle={TOOLTIP_STYLE}
+            itemStyle={TOOLTIP_ITEM_STYLE}
+            labelStyle={TOOLTIP_LABEL_STYLE}
             formatter={(v) => [`${v}%`, "비중"]}
           />
           <Bar dataKey="pct" radius={[3, 3, 0, 0]} isAnimationActive={false}>
@@ -80,6 +87,8 @@ export function TrendChart({
           <Tooltip
             cursor={{ fill: "rgba(255,255,255,0.04)" }}
             contentStyle={TOOLTIP_STYLE}
+            itemStyle={TOOLTIP_ITEM_STYLE}
+            labelStyle={TOOLTIP_LABEL_STYLE}
             formatter={(v) => [format(Number(v)), ""]}
           />
           <Bar dataKey="value" radius={[3, 3, 0, 0]} isAnimationActive={false}>

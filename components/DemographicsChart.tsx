@@ -51,6 +51,10 @@ export default function DemographicsChart({
               fontSize: 12,
               color: "#e9edf6",
             }}
+            // 항목 텍스트는 itemStyle 이 없으면 시리즈 색(어두운 네이비)이라
+            // 다크 배경에 묻힌다 (DetailCharts 의 TOOLTIP_ITEM_STYLE 주석 참조)
+            itemStyle={{ color: "#e9edf6" }}
+            labelStyle={{ color: "#8b93ab", marginBottom: 2 }}
             formatter={(v) => [`${v}%`, "비율"]}
           />
           <Bar dataKey="pct" radius={[3, 3, 0, 0]} isAnimationActive={false}>
