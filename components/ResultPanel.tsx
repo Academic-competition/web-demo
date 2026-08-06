@@ -594,9 +594,10 @@ export default function ResultPanel({
           <StatTile
             // "월매출" 라벨은 3배 부풀린 거짓이었다 (2026-08-07 실증) — 원천
             // 당월_매출_금액이 분기 합계다. 이문1동 한식 점포당 값 ÷3 이 golmok
-            // 월평균(1,454만)과 일치. 분기로 표기하고 월평균 환산을 병기한다
-            label="예상 매출 (분기)"
+            // 월평균(1,454만)과 일치. 큰 숫자 옆에 /분기 를 박아 오독을 차단한다
+            label="예상 매출"
             value={formatKRW(result.revenue.monthlyEstimateKRW)}
+            unit="/ 분기"
             hint={`월평균 약 ${formatKRW(result.revenue.monthlyEstimateKRW / 3)} · ${result.revenue.scaleLabel}`}
           />
         )}
@@ -822,7 +823,15 @@ export default function ResultPanel({
 
       {/* ── ③ 매출 분석 — 모델 예측 + 실측 집계 ──────────── */}
       {result.revenue && (
-        <Section n={3} title="매출 분석">
+        <Section
+          n={3}
+          title="매출 분석"
+          aside={
+            <span className="rounded border border-gold/40 bg-gold/10 px-1.5 py-px font-medium text-gold-soft">
+              모든 금액 = 분기(3개월) 기준
+            </span>
+          }
+        >
           {/* (a) 모델 예측 */}
           <div className="mb-1.5 flex items-center gap-1.5 text-[10px] text-faint">
             <span className="rounded border border-gold/40 bg-gold/10 px-1.5 py-px font-medium text-gold-soft">

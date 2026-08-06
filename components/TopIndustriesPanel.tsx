@@ -230,8 +230,9 @@ export default function TopIndustriesPanel({
                     style={{ fontFamily: "var(--font-numeric)" }}
                   >
                     {formatKRW(r.monthlyEstimateKRW)}
+                    <span className="ml-0.5 text-[9px] font-normal text-gold-soft">/분기</span>
                   </span>
-                  <span className="text-[9px] text-faint">예상 매출 (분기)</span>
+                  <span className="text-[9px] text-faint">예상 매출</span>
                 </>
               )}
             </span>
