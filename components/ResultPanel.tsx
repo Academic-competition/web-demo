@@ -16,6 +16,7 @@ import type {
   RatioSlice,
   SafetyDetail,
 } from "@/lib/contracts";
+import { useEffect, useState } from "react";
 import { competitionAdvice, footTrafficAdvice, revenueAdvice } from "@/lib/advice";
 import { formatKRW, formatKRWCompact, formatPeople, pctChange } from "@/lib/format";
 import { mockSafety } from "@/lib/mockExtras";
@@ -267,6 +268,67 @@ function MockBadge() {
   );
 }
 
+/**
+ * 섹션 점프 내비 — golmok 벤치마크(§3)의 리포트 탭과 같은 역할.
+ * 그쪽도 뷰를 나누는 게 아니라 한 개의 긴 스크롤 안에서 위치를 옮긴다(`tabmove()` 실측 확인).
+ * 리포트가 7~8화면이라 위치 감각을 주는 것이 목적 — 정보를 숨기지 않는다.
+ */
+const SECTION_NAV: { n: number; label: string }[] = [
+  { n: 1, label: "종합" },
+  { n: 2, label: "생존" },
+  { n: 3, label: "매출" },
+  { n: 4, label: "경쟁" },
+  { n: 5, label: "인구" },
+  { n: 6, label: "치안" },
+  { n: 7, label: "배후지" },
+  { n: 8, label: "유의사항" },
+];
+
+function SectionNav() {
+  const [active, setActive] = useState(1);
+  useEffect(() => {
+    const els = SECTION_NAV.map((s) => document.getElementById(`report-sec-${s.n}`)).filter(
+      (e): e is HTMLElement => !!e
+    );
+    if (!els.length) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        const top = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+        if (top) setActive(Number(top.target.id.replace("report-sec-", "")));
+      },
+      { rootMargin: "-8% 0px -70% 0px", threshold: 0 }
+    );
+    els.forEach((e) => io.observe(e));
+    return () => io.disconnect();
+  }, []);
+
+  return (
+    <nav
+      aria-label="리포트 섹션 이동"
+      className="sticky top-0 z-10 -mx-1 flex gap-1 overflow-x-auto rounded-lg border border-line/50 bg-ink-800/90 px-1.5 py-1.5 backdrop-blur"
+    >
+      {SECTION_NAV.map((s) => (
+        <button
+          key={s.n}
+          onClick={() =>
+            document.getElementById(`report-sec-${s.n}`)?.scrollIntoView({ behavior: "smooth", block: "start" })
+          }
+          aria-current={active === s.n ? "true" : undefined}
+          className={`shrink-0 rounded px-2 py-1 text-[10.5px] transition ${
+            active === s.n
+              ? "bg-gold/15 font-medium text-gold-soft"
+              : "text-muted hover:bg-ink-700/60 hover:text-fg"
+          }`}
+        >
+          {s.label}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
 function Section({
   n,
   title,
@@ -281,7 +343,10 @@ function Section({
   className?: string;
 }) {
   return (
-    <section className={`rise-in rounded-xl border border-line/60 bg-ink-800/40 px-5 py-4 ${className}`}>
+    <section
+      id={`report-sec-${n}`}
+      className={`rise-in scroll-mt-3 rounded-xl border border-line/60 bg-ink-800/40 px-5 py-4 ${className}`}
+    >
       <div className="mb-3 flex items-center gap-2">
         <span
           className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-gold/15 text-[11px] font-semibold text-gold"
@@ -479,6 +544,9 @@ export default function ResultPanel({
         </div>
       </header>
 
+      {/* ── 섹션 점프 내비 (golmok 리포트 탭과 같은 역할 — SectionNav 주석 참조) ── */}
+      <SectionNav />
+
       {/* ── KPI 요약 행 ─────────────────────────────────── */}
       <div className="rise-in grid grid-cols-2 gap-2" style={{ animationDelay: "0.04s" }}>
         {result.survival && (
@@ -560,11 +628,12 @@ export default function ResultPanel({
           )}
           {rankingContext && (
             <Bullet tag="기회">
-              이 상권의 {rankingContext.total}개 업종 중 창업기회점수{" "}
+              이 상권의 {rankingContext.total}개 업종 중{" "}
               <b className="text-gold">{rankingContext.rank}위</b>
-              <span className="text-muted">
-                {" "}(점수 {rankingContext.opportunityScore.toFixed(0)} — 상권 내 상대 지표).
-              </span>
+              {/* 원점수(백분위)는 표시하지 않는다 — 아래 '모델 종합진단' 점수와 같은
+                  overall_score 에서 나온 다른 척도라 한 화면에 두 숫자가 있으면 혼선이 된다.
+                  순위는 여기서, 점수는 진단 카드 한 곳에서만 말한다. */}
+              <span className="text-muted"> (상권 내 업종 간 비교).</span>
             </Bullet>
           )}
           {result.context?.competition?.storeCount != null && (
@@ -681,22 +750,9 @@ export default function ResultPanel({
               </div>
             )}
 
-            {(result.diagnosis.strengths?.length || result.diagnosis.risks?.length) ? (
-              <div className="mt-2 space-y-0.5 border-t border-line/40 pt-1.5">
-                {result.diagnosis.strengths?.map((s) => (
-                  <div key={s} className="text-[10px] leading-relaxed text-muted">
-                    <span className="mr-1 text-safe">▲</span>
-                    {s}
-                  </div>
-                ))}
-                {result.diagnosis.risks?.map((s) => (
-                  <div key={s} className="text-[10px] leading-relaxed text-muted">
-                    <span className="mr-1 text-risk">▼</span>
-                    {s}
-                  </div>
-                ))}
-              </div>
-            ) : null}
+            {/* diagnosis.strengths / risks 는 의도적으로 렌더하지 않는다 —
+                위 불릿(advice.ts 의 값→판단→조언)과 같은 내용을 반복하기 때문.
+                계보에도 행을 넣지 않는다. 데이터는 계약에 남겨 뒀다(다른 화면에서 쓸 수 있게). */}
 
             {result.diagnosis.note && (
               <p className="mt-1.5 text-[9px] leading-relaxed text-faint">{result.diagnosis.note}</p>
@@ -1161,24 +1217,49 @@ export default function ResultPanel({
                   </>
                 }
               >
+                {/* 값만 주면 높은지 낮은지 알 수 없어 자치구·서울 중앙값 대비를 함께 표시한다
+                    (golmok 벤치마크 §3 — 밀도는 항상 3단 비교와 같이 나온다) */}
                 <div className="grid grid-cols-3 gap-2">
                   {(
                     [
-                      ["유동 (분기)", result.context.density.footTrafficPerKm2],
-                      ["상주", result.context.density.residentPerKm2],
-                      ["직장", result.context.density.workerPerKm2],
+                      ["유동 (분기)", "footTrafficPerKm2"],
+                      ["상주", "residentPerKm2"],
+                      ["직장", "workerPerKm2"],
                     ] as const
-                  ).map(([label, v]) => (
-                    <div key={label} className="rounded-lg bg-ink-700/50 px-3 py-2">
-                      <div className="text-[10px] text-faint">{label}</div>
-                      <div
-                        className="mt-0.5 text-sm font-semibold text-fg"
-                        style={{ fontFamily: "var(--font-numeric)" }}
-                      >
-                        {v != null ? formatPeopleCompact(v) : "―"}
+                  ).map(([label, key]) => {
+                    const d = result.context!.density!;
+                    const v = d[key];
+                    const gu = d.guMedian?.[key] ?? null;
+                    const seoul = d.seoulMedian?.[key] ?? null;
+                    const ratio = v != null && seoul ? v / seoul : null;
+                    return (
+                      <div key={label} className="rounded-lg bg-ink-700/50 px-3 py-2">
+                        <div className="text-[10px] text-faint">{label}</div>
+                        <div
+                          className="mt-0.5 text-sm font-semibold text-fg"
+                          style={{ fontFamily: "var(--font-numeric)" }}
+                        >
+                          {v != null ? formatPeopleCompact(v) : "―"}
+                        </div>
+                        {ratio != null && (
+                          <div className="mt-0.5 text-[9.5px] leading-tight text-muted">
+                            서울 중앙값의{" "}
+                            {/* 1 미만은 '배'로 쓰면 0.0 으로 뭉개진다 (실측: 상주 0.004배) → % 로 */}
+                            <b className={ratio >= 1 ? "text-safe" : "text-muted"}>
+                              {ratio >= 1
+                                ? `${ratio >= 10 ? Math.round(ratio) : ratio.toFixed(1)}배`
+                                : `${(ratio * 100).toFixed(ratio >= 0.1 ? 0 : 1)}%`}
+                            </b>
+                          </div>
+                        )}
+                        {gu != null && v != null && (
+                          <div className="text-[9px] leading-tight text-faint">
+                            {d.guName ?? "자치구"} 중앙 {formatPeopleCompact(gu)}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </SubBlock>
             )}
@@ -1353,6 +1434,21 @@ export default function ResultPanel({
                 </div>
               </div>
             </div>
+            {/* 서울 중앙값 대비 — 값만으로는 비싼지 싼지 알 수 없다 (golmok 벤치마크 §3) */}
+            {detail.realEstate.seoulMedianRentPerM2KRW != null && (() => {
+              const d = detail.realEstate!.rentPerM2KRW - detail.realEstate!.seoulMedianRentPerM2KRW!;
+              const cheaper = d < 0;
+              return (
+                <p className="mt-1.5 text-[10.5px] leading-relaxed text-muted">
+                  서울 중앙값(
+                  {Math.round(detail.realEstate!.seoulMedianRentPerM2KRW!).toLocaleString()}원/m²)보다{" "}
+                  <b className={cheaper ? "text-safe" : "text-caution"}>
+                    {Math.abs(Math.round(d)).toLocaleString()}원 {cheaper ? "낮습니다" : "높습니다"}
+                  </b>
+                  . 고정비 부담을 주변 시세와 함께 확인하세요.
+                </p>
+              );
+            })()}
             <p className="mt-1.5 text-[9.5px] leading-relaxed text-faint">{detail.realEstate.basis}</p>
           </SubBlock>
         ) : null;

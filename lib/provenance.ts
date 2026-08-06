@@ -248,14 +248,8 @@ export function provenanceOf(
       from: `survival.grade="${result.survival.grade}" (gradeOf)`,
     });
   }
-  if (result.diagnosis?.strengths?.length || result.diagnosis?.risks?.length) {
-    rows.push({
-      block: "① 강점·리스크",
-      kind: "rule",
-      how: "지표 문턱값 조건에 걸린 항목을 문장 템플릿으로 나열 (모델 저장소 진단 규칙)",
-      from: `diagnosis.strengths ${result.diagnosis.strengths?.length ?? 0} · risks ${result.diagnosis.risks?.length ?? 0}`,
-    });
-  }
+  // diagnosis.strengths/risks 행 없음 — 화면에 렌더하지 않는다 (불릿과 중복).
+  // 계보는 '화면에 보이는 숫자의 출처'를 설명하는 표이므로 렌더 안 하는 항목은 넣지 않는다.
   if (result.narrative) {
     rows.push({
       block: "① 해석 문장",

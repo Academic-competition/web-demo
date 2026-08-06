@@ -555,6 +555,7 @@ function packDetail(raw: any): AnalyzeResult["detail"] {
             vacancyRate: num(raw.realEstate.vacancyRate),
             rentIndex: num(raw.realEstate.rentIndex),
             rentIndexYoy: num(raw.realEstate.rentIndexYoy),
+            seoulMedianRentPerM2KRW: num(raw.realEstate.seoulMedianRentPerM2KRW),
             joinMethod:
               typeof raw.realEstate.joinMethod === "string"
                 ? raw.realEstate.joinMethod
@@ -709,26 +710,29 @@ function normalizeAnalyze(
                 saturday: raw.context.footTraffic.saturday ?? null,
               }
             : null,
-          // v2 신규 — 인구 밀도 3종 (명/km²)
+          // v2 신규 — 인구 밀도 3종 (명/km²) + 비교 기준(자치구·서울 중앙값)
           density: raw.context.density
-            ? {
-                footTrafficPerKm2:
-                  raw.context.density.footTrafficPerKm2 != null
-                    ? Number(raw.context.density.footTrafficPerKm2)
-                    : null,
-                residentPerKm2:
-                  raw.context.density.residentPerKm2 != null
-                    ? Number(raw.context.density.residentPerKm2)
-                    : null,
-                workerPerKm2:
-                  raw.context.density.workerPerKm2 != null
-                    ? Number(raw.context.density.workerPerKm2)
-                    : null,
-                areaKm2:
-                  raw.context.density.areaKm2 != null
-                    ? Number(raw.context.density.areaKm2)
-                    : null,
-              }
+            ? (() => {
+                const d = raw.context.density;
+                const nn = (v: any) => (v != null && Number.isFinite(Number(v)) ? Number(v) : null);
+                const triple = (t: any) =>
+                  t && typeof t === "object"
+                    ? {
+                        footTrafficPerKm2: nn(t.footTrafficPerKm2),
+                        residentPerKm2: nn(t.residentPerKm2),
+                        workerPerKm2: nn(t.workerPerKm2),
+                      }
+                    : null;
+                return {
+                  footTrafficPerKm2: nn(d.footTrafficPerKm2),
+                  residentPerKm2: nn(d.residentPerKm2),
+                  workerPerKm2: nn(d.workerPerKm2),
+                  areaKm2: nn(d.areaKm2),
+                  guName: typeof d.guName === "string" ? d.guName : null,
+                  guMedian: triple(d.guMedian),
+                  seoulMedian: triple(d.seoulMedian),
+                };
+              })()
             : null,
           competition: raw.context.competition
             ? {

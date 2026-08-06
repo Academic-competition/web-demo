@@ -506,8 +506,30 @@ def main() -> int:
             "note": diag_note,
         }
 
+    # ---- 밀도·임대 비교 기준 (자치구·서울 중앙값) ----
+    # golmok 벤치마크: 밀도/임대는 "값 + 자치구·서울 대비"를 함께 보여야 해석이 된다
+    # (2026-08-05 실측 — docs/BENCHMARK-golmok.md §3). 값만 주면 높은지 낮은지 알 수 없다.
+    # 상권 단위 지표라 상권 중복을 제거하고 집계한다 (업종 행마다 같은 값이 반복되므로).
+    _dens_cols = {
+        "footTrafficPerKm2": "foot_traffic_density_km2",
+        "residentPerKm2": "resident_density_km2",
+        "workerPerKm2": "worker_density_km2",
+    }
+    _sw_uniq = sv.drop_duplicates("상권_코드")
+    density_seoul = {k: num(_sw_uniq[c].median()) for k, c in _dens_cols.items() if c in _sw_uniq}
+    density_gu = {}
+    for gu_name, g in _sw_uniq.groupby("자치구_코드_명"):
+        density_gu[gu_name] = {k: num(g[c].median()) for k, c in _dens_cols.items() if c in g}
+    rent_seoul = num(_sw_uniq["re_rent_per_m2"].median()) if "re_rent_per_m2" in _sw_uniq else None
+    print(f"      비교 기준: 밀도 서울중앙값 {len(density_seoul)}종 · 자치구 {len(density_gu)}개"
+          f" · 임대 서울중앙값 {rent_seoul}")
+
     def density_block(r) -> dict | None:
-        """인구 밀도 3종 (명/km², 상권 영역 면적 기준) — 실측 ÷ 면적 단순 환산."""
+        """인구 밀도 3종 (명/km², 상권 영역 면적 기준) — 실측 ÷ 면적 단순 환산.
+
+        자치구·서울 중앙값을 함께 실어 UI 가 '높다/낮다'를 말할 수 있게 한다.
+        (평균이 아니라 중앙값 — 밀도 분포가 극단값에 크게 휘어 있다)
+        """
         vals = {
             "footTrafficPerKm2": num(getattr(r, "foot_traffic_density_km2", None)),
             "residentPerKm2": num(getattr(r, "resident_density_km2", None)),
@@ -517,10 +539,17 @@ def main() -> int:
             return None
         area = num(getattr(r, "영역_면적", None))
         vals["areaKm2"] = round(area / 1_000_000, 4) if area else None
+        vals["guName"] = r.자치구_코드_명
+        vals["guMedian"] = density_gu.get(r.자치구_코드_명)
+        vals["seoulMedian"] = density_seoul or None
         return vals
 
     def realestate_block(r) -> dict | None:
-        """R-ONE 임대 지표 — 자치구 평균(gu_mean) 조인. 상권 단위 실측이 아님을 캡션에 명시."""
+        """R-ONE 임대 지표 — 자치구 평균(gu_mean) 조인. 상권 단위 실측이 아님을 캡션에 명시.
+
+        ⚠️ 값 자체가 이미 자치구 평균이므로 '자치구 대비'는 무의미하다 (자기 자신).
+           서울 중앙값 대비만 제공한다.
+        """
         rent = num(getattr(r, "re_rent_per_m2", None))
         if rent is None:
             return None
@@ -530,6 +559,7 @@ def main() -> int:
             "vacancyRate": num(getattr(r, "re_vacancy_rate", None)),        # 0~1
             "rentIndex": num(getattr(r, "re_rent_index", None)),            # 기준 100
             "rentIndexYoy": num(getattr(r, "re_rent_index_yoy", None)),     # 비율 (0.006 = +0.6%)
+            "seoulMedianRentPerM2KRW": rent_seoul,
             "joinMethod": method if isinstance(method, str) else None,
             "basis": "한국부동산원 R-ONE 소규모 상가 임대동향 — 자치구 평균값 조인 (상권 단위 실측 아님)",
         }

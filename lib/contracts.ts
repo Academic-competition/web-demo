@@ -131,6 +131,14 @@ export const DiagnosisPayload = z.object({
 });
 export type DiagnosisPayload = z.infer<typeof DiagnosisPayload>;
 
+/** 밀도 3종 묶음 — 상권 값과 비교 기준(자치구·서울 중앙값)이 같은 모양이다 */
+export const DensityTriple = z.object({
+  footTrafficPerKm2: z.number().nullable(),
+  residentPerKm2: z.number().nullable(),
+  workerPerKm2: z.number().nullable(),
+});
+export type DensityTriple = z.infer<typeof DensityTriple>;
+
 export const ContextPayload = z.object({
   footTraffic: z
     .object({
@@ -139,13 +147,20 @@ export const ContextPayload = z.object({
       saturday: z.number().nullable(),
     })
     .nullable(),
-  /** v2 신규 — 인구 밀도 (명/km², 상권 영역 면적 기준 단순 환산). 구 번들엔 없음 */
+  /**
+   * v2 신규 — 인구 밀도 (명/km², 상권 영역 면적 기준 단순 환산). 구 번들엔 없음.
+   * `guMedian`/`seoulMedian` 은 해석 기준 — 밀도 값만 주면 높은지 낮은지 알 수 없어서
+   * 함께 싣는다 (golmok 벤치마크 §3: 밀도는 항상 3단 비교와 같이 표시된다).
+   */
   density: z
     .object({
       footTrafficPerKm2: z.number().nullable(),
       residentPerKm2: z.number().nullable(),
       workerPerKm2: z.number().nullable(),
       areaKm2: z.number().nullable(),
+      guName: z.string().nullable().optional(),
+      guMedian: DensityTriple.nullable().optional(),
+      seoulMedian: DensityTriple.nullable().optional(),
     })
     .nullable()
     .optional(),
@@ -408,6 +423,11 @@ export const RealEstateDetail = z.object({
   rentIndex: z.number().nullable(),
   /** 지수 전년비 (0.006 = +0.6%) */
   rentIndexYoy: z.number().nullable(),
+  /**
+   * 서울 중앙값 (원/m²) — 해석 기준. ⚠️ '자치구 대비'는 제공하지 않는다:
+   * rentPerM2KRW 자체가 이미 자치구 평균이라 자기 자신과의 비교가 된다.
+   */
+  seoulMedianRentPerM2KRW: z.number().nullable().optional(),
   joinMethod: z.string().nullable(),
   basis: z.string(),
 });
