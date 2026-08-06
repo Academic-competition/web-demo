@@ -4,7 +4,7 @@
  * 프론트는 내부 계약(/api/*)에만 의존한다.
  * 모든 요청/응답은 인스펙터 콘솔(lib/inspector.ts)에 기록된다.
  */
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
 
 import type {
   AnalyzeRequest,
@@ -31,6 +31,40 @@ const lastExternal: {
   hinterland: SourceMode | null;
   spendingAsOf: string | null;
 } = { safety: null, hinterland: null, spendingAsOf: null };
+
+/**
+ * 상권 비교 — 담아둔 (상권 × 업종) 조합을 각각 `/api/analyze` 로 가져온다.
+ *
+ * ⚠️ **웹은 비교용 수치를 새로 만들지 않는다.** 기존 분석 응답을 그대로 나란히 놓기만 하고,
+ *    "누가 더 낫다" 같은 판단도 모델이 이미 준 값(백분위·등급·서울 대비)으로만 말한다.
+ *    비교 전용 집계가 필요해지면 그건 모델/서빙 쪽에 요청할 것 —
+ *    산식이 웹에 생기면 리포트와 비교 화면의 숫자가 갈라진다 (치안 산식에서 겪은 문제).
+ */
+export function useCompare(items: { sangwonCode: number; industryCode: string }[]) {
+  return useQueries({
+    queries: items.map((it) => ({
+      queryKey: ["compare", it.sangwonCode, it.industryCode] as const,
+      queryFn: async (): Promise<AnalyzeResult> => {
+        const started = Date.now();
+        const res = await fetch("/api/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(it),
+        });
+        if (!res.ok) throw new Error("비교 대상 분석 실패");
+        const data: AnalyzeResult = await res.json();
+        inspect(
+          "file",
+          `비교 대상 로드 — ${data.sangwon.name ?? it.sangwonCode} × ${data.industry.name ?? it.industryCode} (${data.sourceMode})`,
+          { sangwonCode: it.sangwonCode, industryCode: it.industryCode, status: data.status },
+          Date.now() - started
+        );
+        return data;
+      },
+      staleTime: 5 * 60 * 1000,
+    })),
+  });
+}
 
 /** 배후지 실측 — 리포트 ⑦ (상권이 정해지면 로드) */
 export function useHinterland(sangwonCode: number | null) {

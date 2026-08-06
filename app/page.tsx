@@ -18,6 +18,7 @@ import ResultPanel, {
   OnboardingCard,
 } from "@/components/ResultPanel";
 import RecentHistory from "@/components/RecentHistory";
+import ComparePanel from "@/components/ComparePanel";
 import TopIndustriesPanel from "@/components/TopIndustriesPanel";
 import TopSangwonsPanel from "@/components/TopSangwonsPanel";
 import {
@@ -31,6 +32,7 @@ import {
 import { nearestSangwon, MAX_SNAP_METERS } from "@/lib/geo";
 import {
   useAnalyze,
+  useCompare,
   useHeatmap,
   useHinterland,
   useMeta,
@@ -93,6 +95,50 @@ export default function Home() {
   const topIndustries = useTopIndustries(selectedCode);
   // 배후지 실측 — 리포트 ⑦ (분석이 열렸을 때만 로드)
   const hinterlandQ = useHinterland(analyze.data ? analyze.data.sangwon.code : null);
+
+  // ── 상권 비교 바스켓 (golmok '비교담기' 벤치마크) ────────────────────
+  // 담는 단위는 (상권 × 업종) 조합 — 같은 업종 다른 상권도, 같은 상권 다른 업종도 담긴다.
+  // 비교 화면은 담긴 조합의 분석 응답을 그대로 나란히 놓기만 한다 (useCompare 주석 참조).
+  const COMPARE_MAX = 3;
+  const [compareItems, setCompareItems] = useState<{ sangwonCode: number; industryCode: string }[]>([]);
+  const compareQueries = useCompare(compareItems);
+  const compareResults = compareQueries
+    .map((q) => q.data)
+    .filter((d): d is NonNullable<typeof d> => !!d);
+  const compareLoading = compareQueries.filter((q) => q.isPending).length;
+
+  const isInCompare = useCallback(
+    (sangwonCode: number, industryCode: string) =>
+      compareItems.some((i) => i.sangwonCode === sangwonCode && i.industryCode === industryCode),
+    [compareItems]
+  );
+  const toggleCompare = useCallback(
+    (sangwonCode: number, industryCode: string) => {
+      // ⚠️ inspect() 는 setState 업데이터 **밖에서** 호출한다.
+      //    업데이터는 렌더 중에 실행될 수 있어서, 그 안에서 인스펙터 스토어를 건드리면
+      //    "Cannot update a component while rendering a different component" 경고가 난다.
+      const hit = compareItems.some(
+        (i) => i.sangwonCode === sangwonCode && i.industryCode === industryCode
+      );
+      if (hit) {
+        inspect("res", `비교에서 제외 — 상권 ${sangwonCode} × ${industryCode}`);
+        setCompareItems((prev) =>
+          prev.filter((i) => !(i.sangwonCode === sangwonCode && i.industryCode === industryCode))
+        );
+        return;
+      }
+      if (compareItems.length >= COMPARE_MAX) {
+        inspect("err", `비교는 최대 ${COMPARE_MAX}개까지입니다 — 먼저 하나를 빼주세요`);
+        return;
+      }
+      inspect(
+        "req",
+        `비교에 담기 — 상권 ${sangwonCode} × ${industryCode} (${compareItems.length + 1}/${COMPARE_MAX})`
+      );
+      setCompareItems((prev) => [...prev, { sangwonCode, industryCode }]);
+    },
+    [compareItems]
+  );
 
   // golmok '나의 등수' 패턴: 선택 업종이 이 상권의 업종 중 기회점수 몇 위인지
   const rankingContext = useMemo(() => {
@@ -512,7 +558,17 @@ export default function Home() {
         </div>
 
         {/* 결과 영역 */}
-        <div className="panel-scroll flex-1 overflow-y-auto px-6 pb-4">
+        <div className="panel-scroll flex-1 space-y-3.5 overflow-y-auto px-6 pb-4">
+          {/* 비교 바스켓 — 담긴 게 있으면 리포트 위에 항상 보인다 (golmok compare_analysis) */}
+          <ComparePanel
+            results={compareResults}
+            loadingCount={compareLoading}
+            onRemove={(s, i) => toggleCompare(s, i)}
+            onClear={() => {
+              inspect("res", "비교 목록 비움");
+              setCompareItems([]);
+            }}
+          />
           {analyze.isPending ? (
             <LoadingState />
           ) : analyze.isError ? (
@@ -532,6 +588,11 @@ export default function Home() {
               safetyFromScores={safetyFromScores}
               hinterland={hinterlandQ.data ?? null}
               extraSources={extraSources}
+              inCompare={isInCompare(analyze.data.sangwon.code, analyze.data.industry.code)}
+              compareCount={compareItems.length}
+              onToggleCompare={() =>
+                toggleCompare(analyze.data!.sangwon.code, analyze.data!.industry.code)
+              }
               onChangeIndustry={() => {
                 if (mode === "location") {
                   /* 위치 고정 — 업종 랭킹으로 되돌아가 다른 업종 선택 */

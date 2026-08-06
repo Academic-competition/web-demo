@@ -433,6 +433,9 @@ export default function ResultPanel({
   safetyFromScores,
   hinterland,
   extraSources,
+  inCompare,
+  compareCount,
+  onToggleCompare,
   onChangeIndustry,
   onChangeLocation,
 }: {
@@ -447,6 +450,10 @@ export default function ResultPanel({
   hinterland?: HinterlandResult | null;
   /** 모델 응답 밖에서 실제로 사용한 추가 출처 (치안 실데이터 등) */
   extraSources?: string[];
+  /** 비교 바스켓에 이미 담겨 있는가 (golmok '비교담기' 패턴) */
+  inCompare?: boolean;
+  compareCount?: number;
+  onToggleCompare?: () => void;
   onChangeIndustry: () => void;
   onChangeLocation: () => void;
 }) {
@@ -543,6 +550,24 @@ export default function ResultPanel({
           <span>· {SOURCE_LABEL[result.sourceMode]}</span>
         </div>
       </header>
+
+      {/* ── 비교 담기 (golmok '비교담기' 패턴) ── */}
+      {onToggleCompare && (
+        <button
+          onClick={onToggleCompare}
+          aria-pressed={inCompare}
+          className={`rise-in w-full rounded-lg border px-3 py-2 text-[11.5px] transition ${
+            inCompare
+              ? "border-gold/50 bg-gold/10 text-gold-soft"
+              : "border-line bg-ink-700/50 text-muted hover:border-gold/40 hover:text-fg"
+          }`}
+        >
+          {inCompare ? "✓ 비교 목록에 담김 — 빼기" : "이 상권을 비교에 담기"}
+          {compareCount != null && compareCount > 0 && (
+            <span className="ml-1.5 text-[10px] text-faint">({compareCount}/3)</span>
+          )}
+        </button>
+      )}
 
       {/* ── 섹션 점프 내비 (golmok 리포트 탭과 같은 역할 — SectionNav 주석 참조) ── */}
       <SectionNav />
