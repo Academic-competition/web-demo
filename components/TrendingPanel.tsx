@@ -64,12 +64,21 @@ export default function TrendingPanel({
   onPick: (code: number) => void;
 }) {
   const [unit, setUnit] = useState<Unit>("sangwon");
-  const [metricKey, setMetricKey] = useState<string>("sales");
+  const [topKey, setTopKey] = useState<string>("sales");
+  /** 유동인구 연령대 서브 필터 (golmok 상세조건 대응) — null = 전체 */
+  const [ageKey, setAgeKey] = useState<string | null>(null);
   const [basis, setBasis] = useState<SortBasis>("value");
   /** 뜨는 동네에서 펼친 동 (드릴다운) — 동 코드 */
   const [openDong, setOpenDong] = useState<number | null>(null);
 
+  /** 실제 조회 지표 — 유동인구 + 연령 선택 시 서브 지표 키로 전환 */
+  const metricKey =
+    topKey === "footTraffic" && ageKey ? `footTraffic_${ageKey}` : topKey;
   const meta = data.metrics[metricKey];
+  /** 연령 서브 토글 목록 — subOf 로 파이프라인이 선언한 것만 (하드코딩 금지) */
+  const ageSubs = Object.entries(data.metrics)
+    .filter(([, m]) => m.subOf === "footTraffic")
+    .map(([k, m]) => ({ key: k.replace("footTraffic_", ""), label: m.label.replace("유동인구 ", "") }));
 
   const sangwonRows = useMemo(
     () => (unit === "sangwon" ? rankRows(data.rows, metricKey, basis) : []),
@@ -133,14 +142,17 @@ export default function TrendingPanel({
         ))}
       </div>
 
-      {/* 지표 토글 */}
+      {/* 지표 토글 (서브 지표는 안 뜬다 — subOf 참조) */}
       <div className="flex flex-wrap gap-1">
         {METRIC_ORDER.filter((k) => data.metrics[k]).map((k) => (
           <button
             key={k}
-            onClick={() => setMetricKey(k)}
+            onClick={() => {
+              setTopKey(k);
+              if (k !== "footTraffic") setAgeKey(null);
+            }}
             className={`rounded-full border px-2.5 py-1 text-[11px] transition ${
-              metricKey === k
+              topKey === k
                 ? "border-gold/70 bg-gold/15 text-gold-soft"
                 : "border-line/60 text-muted hover:border-gold/40 hover:text-fg"
             }`}
@@ -149,6 +161,35 @@ export default function TrendingPanel({
           </button>
         ))}
       </div>
+
+      {/* 연령대 서브 필터 — 유동인구 지표에서만 (golmok 상세조건 대응) */}
+      {topKey === "footTraffic" && ageSubs.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          <button
+            onClick={() => setAgeKey(null)}
+            className={`rounded-full border px-2 py-0.5 text-[10px] transition ${
+              ageKey == null
+                ? "border-gold/60 bg-ink-700/70 text-gold-soft"
+                : "border-line/50 text-faint hover:text-muted"
+            }`}
+          >
+            전체 연령
+          </button>
+          {ageSubs.map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setAgeKey(key)}
+              className={`rounded-full border px-2 py-0.5 text-[10px] transition ${
+                ageKey === key
+                  ? "border-gold/60 bg-ink-700/70 text-gold-soft"
+                  : "border-line/50 text-faint hover:text-muted"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* 정렬 기준 (golmok 상세조건의 최고순위/비교증가율 대응) */}
       <div className="flex gap-1">

@@ -353,6 +353,16 @@ def build_rankings(sales, pop, store, sv, repo: str, out: str) -> dict:
         ("resident", (resident, "TOT_REPOP_CO", False), "상주인구", "명", "상권 전체"),
         ("worker", (worker, "TOT_WRC_POPLTN_CO", False), "직장인구", "명", "상권 전체"),
     ]
+    # 유동인구 연령대 서브 지표 (golmok 뜨는 상권 상세조건의 연령대 필터 대응).
+    # 최상위 토글이 아니라 footTraffic 선택 시 서브 토글 — UI 는 subOf 로 구분한다.
+    AGE_SUBS = [("10", "10대"), ("20", "20대"), ("30", "30대"),
+                ("40", "40대"), ("50", "50대"), ("60_ABOVE", "60대 이상")]
+    for a, lb in AGE_SUBS:
+        metric_defs.append((
+            f"footTraffic_{a.split('_')[0]}",
+            (pop, f"AGRDE_{a}_FLPOP_CO", False),
+            f"유동인구 {lb}", "명", "상권 전체",
+        ))
 
     # 상권 → 행정동·자치구 매핑 (서빙 테이블, 상권 중복 제거)
     _sw = sv.drop_duplicates("상권_코드").set_index("상권_코드")
@@ -405,7 +415,9 @@ def build_rankings(sales, pop, store, sv, repo: str, out: str) -> dict:
         # 판정 재료(중앙값)는 여기(가공층)서 계산 — 웹은 플래그만 쓴다.
         prev_median = float(prv.median()) if len(prv) else 0.0
         metrics_meta[key] = {"label": label, "unit": unit, "scope": scope, "asOf": asof,
-                             "lowBaseThreshold": num(prev_median)}
+                             "lowBaseThreshold": num(prev_median),
+                             # 서브 지표는 최상위 토글에 안 뜬다 — footTraffic 의 연령대 필터
+                             "subOf": "footTraffic" if key.startswith("footTraffic_") else None}
         for code, v in cur.items():
             value = num(v)
             if value is None:

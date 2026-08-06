@@ -612,6 +612,8 @@ export const RankingMetricMeta = z.object({
   asOf: z.string(),
   /** 소표본(lowBase) 판정에 쓴 직전 분기 중앙값 — 근거 표기용 */
   lowBaseThreshold: z.number().nullable(),
+  /** 서브 지표 (예: footTraffic_20 → "footTraffic") — 최상위 토글에 안 뜬다 */
+  subOf: z.string().nullable().optional(),
 });
 
 export const RankingEntry = z.object({
