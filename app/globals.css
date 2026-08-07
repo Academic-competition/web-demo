@@ -23,6 +23,21 @@
   --color-caution: #f5b84b;
   --color-risk: #f0655d;
 
+  /* 차트 전용 — 강조(gold) 외 기본 막대. 여러 차트에 하드코딩돼 있던 값을 토큰화했다
+     (하드코딩 hex 금지 규칙: CLAUDE.md '스타일'). bar-soft 는 비교 바의 배경 트랙. */
+  --color-chart-bar: #3a486e;
+  --color-chart-bar-soft: #2b3559;
+  /* 성별 분할 바 — 신호등(safe/caution/risk)과 섞이면 안 되는 '식별' 색이라 별도 슬롯 */
+  --color-chart-male: #4a6fa5;
+  --color-chart-female: #a5637c;
+  /* 차트 텍스트(축 눈금·값 라벨)와 호버 워시 — 리포트 라이트 모드에서 뒤집혀야 해서 토큰.
+     recharts 에는 fill 속성값으로 var() 를 넘긴다 (기존 Cell 의 var(--color-gold) 와 같은 패턴) */
+  --color-chart-tick: #8a95b0;
+  --color-chart-label: #aab3c9;
+  --color-chart-cursor: rgba(255, 255, 255, 0.04);
+  /* 치안 카드·종합점수 히트맵의 틸 액센트 (신호등과 구분되는 별도 계열) */
+  --color-accent-teal: #4ad6c0;
+
   --font-display: var(--font-hahmlet), serif;
   --font-body: var(--font-plex), sans-serif;
   --font-numeric: var(--font-mono), monospace;
@@ -51,6 +66,62 @@ body {
       rgba(255, 255, 255, 0.014) 23px,
       rgba(255, 255, 255, 0.014) 24px
     );
+}
+
+/* ─────────────────────────────────────────────────────────────
+   리포트 패널 라이트('종이') 모드 — 2026-08-07 가독성 실험
+   Tailwind v4 유틸리티는 전부 var(--color-*) 를 참조하므로,
+   이 스코프에서 토큰만 재정의하면 패널 서브트리 전체가 뒤집힌다.
+   지도·인스펙터(main 쪽)는 다크 유지 — 하이브리드 구성.
+   값 선정 기준: 본문 10~13px 한글이 대상이라 텍스트 계열은
+   흰 배경 대비 4.5:1 이상(제목·본문), 보조는 3:1 이상.
+   ───────────────────────────────────────────────────────────── */
+.report-theme-light {
+  --color-ink-950: #eeeae0;
+  --color-ink-900: #f9f7f1; /* 패널 바탕 — 순백보다 눈부심 적은 웜 페이퍼 */
+  --color-ink-800: #ffffff; /* 카드 */
+  --color-ink-700: #f0ebdf;
+  --color-ink-600: #e1d9c6;
+  --color-line: #ddd4bf;
+
+  --color-fg: #212940;
+  --color-muted: #566078;
+  --color-faint: #8b91a4;
+
+  /* 골드는 밝은 배경에서 대비가 무너진다(#e3b65a ≈ 1.9:1) → 딥 골드로 */
+  --color-gold: #9a7423;
+  --color-gold-soft: #7c5d18;
+
+  --color-safe: #0d8a5f;
+  --color-caution: #9c6a06;
+  --color-risk: #c93a31;
+
+  --color-chart-bar: #45527a;
+  --color-chart-bar-soft: #e9e3d4;
+  --color-chart-male: #3f639a;
+  --color-chart-female: #9a5570;
+  --color-chart-tick: #566078;
+  --color-chart-label: #454e66;
+  --color-chart-cursor: rgba(33, 41, 64, 0.05);
+  --color-accent-teal: #0e8577;
+}
+
+/* 라이트 모드의 텍스처 — 흰 사선은 안 보이고, 골드 글로우는 종이 얼룩처럼 남긴다 */
+.report-theme-light.panel-texture {
+  background-image:
+    radial-gradient(ellipse 80% 50% at 100% 0%, rgba(154, 116, 35, 0.06), transparent 60%),
+    repeating-linear-gradient(
+      -12deg,
+      transparent 0px,
+      transparent 23px,
+      rgba(33, 41, 64, 0.022) 23px,
+      rgba(33, 41, 64, 0.022) 24px
+    );
+}
+
+.report-theme-light .panel-scroll::-webkit-scrollbar-thumb {
+  background: #cfc7b2;
+  border-color: #f9f7f1;
 }
 
 /* 결과 카드 순차 등장 */

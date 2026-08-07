@@ -106,7 +106,7 @@ export default function TopSangwonsPanel({
               {metric === "survival" && (
                 <span
                   className={`h-2 w-2 shrink-0 rounded-full ${cell.grade ? GRADE_DOT[cell.grade] : ""}`}
-                  style={cell.grade ? undefined : { background: "#5b6683" }}
+                  style={cell.grade ? undefined : { background: "var(--color-faint)" }}
                 />
               )}
               <span className="min-w-0 flex-1">
