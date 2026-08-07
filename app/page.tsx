@@ -109,7 +109,7 @@ export default function Home() {
   const topIndustries = useTopIndustries(selectedCode);
   // 배후지 실측 — 리포트 ⑦ (분석이 열렸을 때만 로드)
   const hinterlandQ = useHinterland(analyze.data ? analyze.data.sangwon.code : null);
-  // 뜨는 상권 랭킹 — 초기·대기 화면에서만 필요하지만 파일 캐시라 상시 로드해도 가볍다.
+  // 상권 TOP10 랭킹 — 초기·대기 화면에서만 필요하지만 파일 캐시라 상시 로드해도 가볍다.
   // 분석이 열려 있으면 패널이 안 보이므로 enabled 를 조여 초기 페인트를 아낀다.
   const rankingsQ = useRankings(!analyze.data);
 
@@ -429,12 +429,13 @@ export default function Home() {
           </p>
 
           {/* 대메뉴 (8/7 피드백) — 한 패널이 랭킹·비교·리포트를 다 떠안아 복잡하다는
-              지적. golmok 처럼 화면을 메뉴로 분리한다: 분석 / 뜨는 상권 / 비교 */}
+              지적. golmok 처럼 화면을 메뉴로 분리한다: 분석 / 상권 TOP10 / 비교.
+              (메뉴명 '뜨는 상권'→'상권 TOP10' — golmok 메뉴명과 겹쳐 8/7 개명) */}
           <nav className="mt-3 flex gap-1 rounded-xl border border-line/70 bg-ink-800/70 p-1">
             {(
               [
                 ["analyze", "상권 분석"],
-                ["trending", "뜨는 상권"],
+                ["trending", "상권 TOP10"],
                 ["compare", "비교함"],
               ] as const
             ).map(([v, label]) => (
@@ -620,7 +621,7 @@ export default function Home() {
         {/* 결과 영역 — 대메뉴(view)별로 한 가지 일만 한다 */}
         <div className="panel-scroll flex-1 space-y-3.5 overflow-y-auto px-6 pb-4 pt-1">
           {view === "trending" ? (
-            /* ── 뜨는 상권 메뉴 — 랭킹이 주인공. 행 클릭 = 분석 메뉴로 전환 ── */
+            /* ── 상권 TOP10 메뉴 — 랭킹이 주인공. 행 클릭 = 분석 메뉴로 전환 ── */
             rankingsQ.data ? (
               <TrendingPanel
                 data={rankingsQ.data}
@@ -757,12 +758,12 @@ export default function Home() {
                 onPick={handlePickHistory}
                 onClear={clearHistory}
               />
-              {/* 뜨는 상권 랭킹은 전용 메뉴로 이동 (8/7) — 여기서는 안내만 */}
+              {/* 상권 TOP10 랭킹은 전용 메뉴로 이동 (8/7) — 여기서는 안내만 */}
               <button
                 onClick={() => setView("trending")}
                 className="w-full rounded-xl border border-line/60 bg-ink-800/40 px-4 py-3 text-left text-[12px] text-muted transition hover:border-gold/50 hover:text-fg"
               >
-                어디부터 볼지 모르겠다면 → <b className="text-gold-soft">뜨는 상권 TOP 10</b> 메뉴에서
+                어디부터 볼지 모르겠다면 → <b className="text-gold-soft">상권 TOP10</b> 메뉴에서
                 지표별 랭킹으로 시작하세요
               </button>
             </>

@@ -1,6 +1,9 @@
 "use client";
 /**
- * TrendingPanel — 초기 화면의 '뜨는 상권 / 뜨는 동네' (golmok 벤치마크 대응)
+ * TrendingPanel — '상권 TOP10' 메뉴 (상권/동네 랭킹 — golmok 벤치마크 대응)
+ *
+ * 메뉴명은 '상권 TOP10' — golmok 의 '뜨는 상권'과 이름이 겹쳐 8/7 개명했다
+ * (기능 대응 관계는 유지, 이름만 구분).
  *
  * golmok 뜨는 상권 = [뜨는 동네(행정동)|뜨는 상권] 토글 × 지표(점포수/매출/유동인구/
  * 주거인구) × 기준(순위/증가율) → Top10. 우리는 직장인구를 더해 5종이고,
@@ -91,7 +94,7 @@ export default function TrendingPanel({
   /** 유동인구 연령대 서브 필터 (golmok 상세조건 대응) — null = 전체 */
   const [ageKey, setAgeKey] = useState<string | null>(null);
   const [basis, setBasis] = useState<SortBasis>("value");
-  /** 뜨는 동네에서 펼친 동 (드릴다운) — 동 코드 */
+  /** 동네 TOP10에서 펼친 동 (드릴다운) — 동 코드 */
   const [openDong, setOpenDong] = useState<number | null>(null);
 
   /** 실제 조회 지표 — 유동인구 + 연령 선택 시 서브 지표 키로 전환 */
@@ -153,7 +156,7 @@ export default function TrendingPanel({
     <div className="rise-in space-y-2">
       <div>
         <h2 className="font-[family-name:var(--font-display)] text-[17px] leading-tight text-fg">
-          뜨는 {unitLabel} TOP {unit === "sangwon" ? sangwonRows.length : dongRows.length}
+          {unitLabel} TOP {unit === "sangwon" ? sangwonRows.length : dongRows.length}
         </h2>
         <p className="mt-0.5 text-[11px] text-muted">
           {meta.label} {effBasis === "value" ? "상위" : "증가율 상위"} · 기준 {meta.asOf} ·{" "}
@@ -163,12 +166,12 @@ export default function TrendingPanel({
         </p>
       </div>
 
-      {/* 단위 토글 — golmok [뜨는 동네|뜨는 상권] 대응 */}
+      {/* 단위 토글 — golmok [뜨는 동네|뜨는 상권] 대응 (라벨은 우리 이름으로) */}
       <div className="flex gap-1">
         {(
           [
-            ["sangwon", "뜨는 상권"],
-            ["dong", "뜨는 동네 (행정동)"],
+            ["sangwon", "상권 TOP10"],
+            ["dong", "동네 TOP10 (행정동)"],
           ] as [Unit, string][]
         ).map(([u, label]) => (
           <button
