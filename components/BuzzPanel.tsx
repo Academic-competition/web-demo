@@ -17,7 +17,18 @@ import { useState } from "react";
 import type { AnalyzeResult } from "@/lib/contracts";
 import { useBuzz } from "@/lib/hooks";
 
-export default function BuzzPanel({ result }: { result: AnalyzeResult }) {
+/**
+ * 로컬 전용 게이트 — NEXT_PUBLIC_BUZZ_ENABLED=true 인 환경에서만 카드를 렌더한다.
+ * 빌드 시점 인라인이므로 Vercel 에 이 변수를 등록하지 않는 한 배포본에는
+ * "키 미설정" 카드조차 보이지 않는다 (미완성 기능을 배포본에 노출하지 않기 위한
+ * 결정, 2026-08-07). 훅 호출 순서 규칙 때문에 게이트를 래퍼로 분리했다.
+ */
+export default function BuzzPanel(props: { result: AnalyzeResult }) {
+  if (process.env.NEXT_PUBLIC_BUZZ_ENABLED !== "true") return null;
+  return <BuzzPanelInner {...props} />;
+}
+
+function BuzzPanelInner({ result }: { result: AnalyzeResult }) {
   const [requested, setRequested] = useState(false);
   const params = {
     sangwonCode: result.sangwon.code,

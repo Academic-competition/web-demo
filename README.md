@@ -40,7 +40,8 @@ pnpm dev        # http://localhost:3000
 | `MODEL_EXPORTS_DIR` | 정적 산출물 폴더 (기본: `<프로젝트 루트>/model-exports`) |
 | `NEXT_PUBLIC_KAKAO_MAP_KEY` | 카카오맵 JS 키 — **없으면 상권 검색 리스트 폴백 UI로 동작** |
 | `MOCK_FALLBACK` | `false`면 오류 시 목업 대신 502 (기본: 목업 폴백 on) |
-| `NAVER_CLIENT_ID/SECRET` | SNS 언급 분석(베타) 수집용 네이버 검색 API — **옵트인**, 미설정이면 카드가 사유 표시 후 비활성 |
+| `NEXT_PUBLIC_BUZZ_ENABLED` | SNS 언급 분석(베타) 카드 렌더 게이트 — **로컬 전용, Vercel 에 등록하지 말 것**. 미설정이면 배포본에 카드 자체가 안 보인다 |
+| `NAVER_CLIENT_ID/SECRET` | SNS 언급 분석(베타) 수집용 네이버 검색 API — 미설정이면 카드가 사유 표시 후 비활성 |
 | `ANTHROPIC_API_KEY` | SNS 언급 분석(베타) 요약용 Claude API — 서버 전용, 버튼 실행 시에만 호출 |
 | `BUZZ_MODEL` | 요약 모델 ID (기본 `claude-opus-5`) |
 
