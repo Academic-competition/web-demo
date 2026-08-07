@@ -9,6 +9,7 @@ import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
 import type {
   AnalyzeRequest,
   AnalyzeResult,
+  BuzzResult,
   HeatmapResult,
   HinterlandResult,
   MetaResult,
@@ -18,7 +19,7 @@ import type {
   TopIndustriesResult,
 } from "./contracts";
 import { inspect } from "./inspector";
-import { PROVENANCE_LABEL, provenanceOf, provenanceSummary } from "./provenance";
+import { PROVENANCE_LABEL, buzzProvenanceRow, provenanceOf, provenanceSummary } from "./provenance";
 
 /**
  * 외부 데이터(치안·배후지)의 최근 sourceMode.
@@ -239,6 +240,68 @@ export function useAnalyze() {
       }
       return data;
     },
+  });
+}
+
+/**
+ * SNS 언급 분석 (베타) — 리포트의 유일한 **생성형 AI** 데이터.
+ *
+ * enabled=false 로 시작해 사용자가 버튼을 눌러야 호출된다 — 요청마다 외부 API
+ * (네이버 검색)와 LLM 과금이 발생하므로 자동 실행하지 않는다 (옵트인).
+ * 결과는 결정적이지 않다: 같은 입력이라도 실행마다 요약이 다를 수 있고,
+ * UI 는 이를 라벨로 상시 밝힌다. staleTime Infinity — 서버 캐시(6h)와 별개로
+ * 세션 내 재호출을 막는다.
+ */
+export function useBuzz(
+  params: {
+    sangwonCode: number;
+    industryCode: string;
+    sangwonName: string | null;
+    dong: string | null;
+    industryName: string | null;
+  } | null,
+  enabled: boolean
+) {
+  return useQuery<BuzzResult>({
+    queryKey: ["buzz", params?.sangwonCode, params?.industryCode],
+    queryFn: async () => {
+      const qs = new URLSearchParams({
+        sangwonCode: String(params!.sangwonCode),
+        industryCode: params!.industryCode,
+        ...(params!.sangwonName ? { sangwonName: params!.sangwonName } : {}),
+        ...(params!.dong ? { dong: params!.dong } : {}),
+        ...(params!.industryName ? { industryName: params!.industryName } : {}),
+      });
+      inspect("req", `GET /api/buzz — SNS 수집·생성형 요약 (옵트인 실행)`, Object.fromEntries(qs));
+      const started = Date.now();
+      const res = await fetch(`/api/buzz?${qs}`);
+      if (!res.ok) {
+        inspect("err", `SNS 분석 실패 — HTTP ${res.status}`, undefined, Date.now() - started);
+        throw new Error("SNS 분석 요청에 실패했습니다.");
+      }
+      const data: BuzzResult = await res.json();
+      if (data.available) {
+        // 계보: 이 블록만 '생성형 AI' — 규칙 기반 해석 문장과 다른 층임을 콘솔에도 남긴다
+        const row = buzzProvenanceRow(data);
+        inspect(
+          "model",
+          `생성형 요약 — Claude ${data.model} · 수집 ${data.postCount}건${data.cached ? " (서버 캐시)" : ""}`,
+          {
+            계보: { 블록: row.block, 분류: PROVENANCE_LABEL[row.kind], 산출: row.how, 근거필드: row.from },
+            검색어: data.query,
+            표본진단: data.summary?.representativeness,
+            광고의심비율: data.summary?.adRatio,
+          },
+          Date.now() - started
+        );
+      } else {
+        inspect("err", `SNS 분석 불가 — ${data.reason}`, data, Date.now() - started);
+      }
+      return data;
+    },
+    enabled: enabled && !!params,
+    staleTime: Infinity,
+    retry: false, // LLM 호출 — 실패 시 자동 재시도로 과금하지 않는다
   });
 }
 

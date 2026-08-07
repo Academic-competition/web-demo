@@ -22,6 +22,7 @@ import { formatKRW, formatKRWCompact, formatPeople, pctChange } from "@/lib/form
 import { mockSafety } from "@/lib/mockExtras";
 import SurvivalGauge from "./SurvivalGauge";
 import DemographicsChart from "./DemographicsChart";
+import BuzzPanel from "./BuzzPanel";
 import {
   CompareBars,
   DeltaBadge,
@@ -1690,6 +1691,11 @@ export default function ResultPanel({
           </Section>
         );
       })()}
+
+      {/* ── SNS 언급 분석 (베타) — 번호 없는 점선 카드: 유일한 생성형 AI 블록.
+             규칙 기반 리포트 본문과 산출 층이 달라 시각적으로도 분리한다.
+             옵트인 버튼 실행 · 수집 원문 공개 · 비결정성 라벨은 BuzzPanel 책임 ── */}
+      <BuzzPanel result={result} />
 
       {/* ── ⑧ 유의사항 · 한계 ───────────────────────────── */}
       <Section n={8} title="유의사항 · 한계">

@@ -696,6 +696,57 @@ export const RankingsResult = z.object({
 export type RankingsResult = z.infer<typeof RankingsResult>;
 
 // ------------------------------------------------------------------
+// SNS 언급 분석 (베타) — /api/buzz
+//
+// 유일하게 **생성형 AI(LLM)** 가 만드는 응답이다. 리포트 본문의 해석 문장
+// (규칙 기반·결정적)과 달리 실행마다 결과가 다를 수 있으며, UI 는 반드시
+// "생성형 AI · 실시간 수집 N건 · 대표성 미보장" 라벨을 붙여야 한다.
+// 서버(route handler)가 네이버 검색 API 로 글을 수집하고 Claude 가 요약한다 —
+// 웹이 숫자를 만들지 않는 원칙의 예외가 아니라, "텍스트 요약"이라는 별도 층이다.
+// ------------------------------------------------------------------
+export const BuzzSource = z.object({
+  title: z.string(),
+  link: z.string(),
+  source: z.enum(["blog", "cafe"]),
+  /** yyyymmdd — 카페글은 원천에 날짜가 없어 null */
+  date: z.string().nullable(),
+});
+export type BuzzSource = z.infer<typeof BuzzSource>;
+
+export const BuzzSummary = z.object({
+  /** 수집 글에서 실제 언급된 메뉴/상품 (모델이 지어내지 않도록 프롬프트로 강제) */
+  menus: z.array(z.string()),
+  /** 반복 등장하는 키워드·패턴 */
+  keywords: z.array(z.string()),
+  /** 분위기·고객층 요약 (2~3문장) */
+  vibe: z.string(),
+  /** 창업 관점 시사점 */
+  tips: z.array(z.string()),
+  /** 광고·협찬 의심 글 비율 추정 (0~1) — 표본 오염도를 스스로 밝힌다 */
+  adRatio: z.number().nullable(),
+  /** 표본 대표성 자가 진단 한 줄 ("글 12건, 특정 매장 편중" 등) */
+  representativeness: z.string(),
+});
+export type BuzzSummary = z.infer<typeof BuzzSummary>;
+
+export const BuzzResult = z.object({
+  /** false 면 reason 에 사유 (API 키 미설정 / 수집 0건 / LLM 거부 등) */
+  available: z.boolean(),
+  reason: z.string().nullable().optional(),
+  /** 실제 사용한 검색어 (감사 가능하게 노출) */
+  query: z.string().nullable().optional(),
+  postCount: z.number().int().optional(),
+  collectedAt: z.string().nullable().optional(),
+  /** 요약에 쓴 LLM 모델 ID — 계보 표기용 */
+  model: z.string().nullable().optional(),
+  cached: z.boolean().optional(),
+  summary: BuzzSummary.nullable().optional(),
+  sources: z.array(BuzzSource).optional(),
+  debug: DebugTrace.nullable().optional(),
+});
+export type BuzzResult = z.infer<typeof BuzzResult>;
+
+// ------------------------------------------------------------------
 // 신호등 판정 (서버 전용 — ANSWERS.md Q6 권장 문턱값)
 // ------------------------------------------------------------------
 export const GRADE_THRESHOLDS = { safe: 0.6, caution: 0.45 } as const;

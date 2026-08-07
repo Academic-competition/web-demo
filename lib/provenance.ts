@@ -9,15 +9,16 @@
  *    방식이 바뀌면 basis 값이 바뀌고, 그러면 이 표도 따라 바뀌어야 정상이다.
  *    (basis 문자열의 정본: 모델 저장소 `tools/export_web_static.py` / `api/schemas.py`)
  */
-import type { AnalyzeResult, SourceMode } from "./contracts";
+import type { AnalyzeResult, BuzzResult, SourceMode } from "./contracts";
 
-export type ProvenanceKind = "ml" | "stat" | "measured" | "rule" | "example";
+export type ProvenanceKind = "ml" | "stat" | "measured" | "rule" | "generated" | "example";
 
 export const PROVENANCE_LABEL: Record<ProvenanceKind, string> = {
   ml: "ML 예측",
   stat: "통계 가공",
   measured: "실측 집계",
   rule: "규칙 기반",
+  generated: "생성형 AI",
   example: "예시 데이터",
 };
 
@@ -265,9 +266,25 @@ export function provenanceOf(
   return rows;
 }
 
+/**
+ * SNS 언급 분석(베타) 계보 행 — provenanceOf 와 분리된 이유:
+ * 계보 표는 analyze 응답 시점에 만들어지지만 이 블록은 사용자가 버튼을 눌러야
+ * 실행된다(옵트인·LLM 과금). 실행 전에 행을 넣으면 "안 쓴 것을 썼다"는 거짓이
+ * 되므로, useBuzz 가 성공 응답을 받은 시점에 이 행을 만들어 인스펙터에 남긴다.
+ * 분류는 응답 필드(model·postCount)에서 파생 — 하드코딩 아님.
+ */
+export function buzzProvenanceRow(buzz: BuzzResult): ProvenanceRow {
+  return {
+    block: "SNS 언급 분석 (베타)",
+    kind: "generated",
+    how: `네이버 블로그·카페 ${buzz.postCount ?? "?"}건 실시간 수집 → ${buzz.model ?? "LLM"} 생성 요약 — 비결정적(실행마다 다를 수 있음), 수집 원문 공개`,
+    from: `buzz.model="${buzz.model}" · postCount=${buzz.postCount} · collectedAt=${buzz.collectedAt}`,
+  };
+}
+
 /** 계보 요약 — "ML 1 · 통계 3 · 실측 5 · 규칙 2" 형태 */
 export function provenanceSummary(rows: ProvenanceRow[]): string {
-  const order: ProvenanceKind[] = ["ml", "stat", "measured", "rule", "example"];
+  const order: ProvenanceKind[] = ["ml", "stat", "measured", "rule", "generated", "example"];
   return order
     .map((k) => ({ k, n: rows.filter((r) => r.kind === k).length }))
     .filter((x) => x.n > 0)
