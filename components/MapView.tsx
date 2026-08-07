@@ -36,6 +36,47 @@ const SEOUL_CENTER = { lat: 37.5665, lng: 126.978 };
 const KAKAO_KEY = process.env.NEXT_PUBLIC_KAKAO_MAP_KEY;
 
 // ------------------------------------------------------------------
+// 서비스 커버리지 외곽 (8/7 피드백 — "서울만 대상임을 지도에서 인지")
+//
+// 행정동/시 경계 폴리곤은 원천에 없다 (PARITY ⚠️ — 외부 GeoJSON 도입은 데이터
+// 주체 정책과 충돌). 대신 **분석 대상 상권 1,570개의 좌표 분포 외곽(convex hull)**
+// 을 표시 계층에서 계산한다 — 모델 데이터에서 파생되고, "서울시 행정 경계"가
+// 아니라 "상권이 있는 범위"라서 오히려 서비스 커버리지로는 더 정직하다.
+// 바깥은 딤 마스킹(도넛 폴리곤), 경계는 점선. 배지가 근사임을 밝힌다.
+// ------------------------------------------------------------------
+function convexHull(pts: { lat: number; lng: number }[]): { lat: number; lng: number }[] {
+  // Andrew monotone chain — lng 를 x, lat 를 y 로
+  const p = [...pts].sort((a, b) => a.lng - b.lng || a.lat - b.lat);
+  if (p.length < 3) return p;
+  const cross = (o: (typeof p)[0], a: (typeof p)[0], b: (typeof p)[0]) =>
+    (a.lng - o.lng) * (b.lat - o.lat) - (a.lat - o.lat) * (b.lng - o.lng);
+  const lower: typeof p = [];
+  for (const pt of p) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], pt) <= 0)
+      lower.pop();
+    lower.push(pt);
+  }
+  const upper: typeof p = [];
+  for (let i = p.length - 1; i >= 0; i--) {
+    const pt = p[i];
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], pt) <= 0)
+      upper.pop();
+    upper.push(pt);
+  }
+  return [...lower.slice(0, -1), ...upper.slice(0, -1)];
+}
+
+/** hull 을 중심 기준으로 살짝 팽창 — 경계 위 상권 점이 선에 물리지 않게 (~4%) */
+function inflateHull(hull: { lat: number; lng: number }[], factor = 1.04) {
+  const cx = hull.reduce((s, p) => s + p.lng, 0) / hull.length;
+  const cy = hull.reduce((s, p) => s + p.lat, 0) / hull.length;
+  return hull.map((p) => ({
+    lng: cx + (p.lng - cx) * factor,
+    lat: cy + (p.lat - cy) * factor,
+  }));
+}
+
+// ------------------------------------------------------------------
 // 색 스케일
 // ------------------------------------------------------------------
 function lerpColor(a: string, b: string, t: number): string {
@@ -217,8 +258,54 @@ function KakaoMap({
       if (modeRef.current !== "location") return;
       clickHandlerRef.current(e.latLng.getLat(), e.latLng.getLng());
     });
+    // 줌아웃 제한 — 전국이 보이면 "서울만 대상"이라는 사실이 흐려진다
+    // (level 이 클수록 넓게 보임. 11 = 수도권 정도까지만)
+    map.setMaxLevel(11);
     mapRef.current = map;
   }, []);
+
+  // 서비스 커버리지 마스크 — 상권 분포 외곽(hull) 바깥을 딤 처리 (convexHull 주석 참조)
+  const coverageRef = useRef<any[]>([]);
+  useEffect(() => {
+    const kakao = window.kakao;
+    const map = mapRef.current;
+    if (!map) return;
+    coverageRef.current.forEach((o) => o.setMap(null));
+    coverageRef.current = [];
+
+    const pts = sangwons
+      .filter((s) => s.lat != null && s.lon != null)
+      .map((s) => ({ lat: s.lat!, lng: s.lon! }));
+    if (pts.length < 3) return;
+    const hull = inflateHull(convexHull(pts));
+    const hullPath = hull.map((p) => new kakao.maps.LatLng(p.lat, p.lng));
+
+    // 도넛 폴리곤: 바깥 링(한반도를 덮는 큰 사각형) + 구멍(커버리지 hull) → 바깥만 딤
+    const outer = [
+      new kakao.maps.LatLng(34.0, 124.0),
+      new kakao.maps.LatLng(34.0, 130.0),
+      new kakao.maps.LatLng(40.0, 130.0),
+      new kakao.maps.LatLng(40.0, 124.0),
+    ];
+    const dim = new kakao.maps.Polygon({
+      path: [outer, hullPath],
+      strokeWeight: 0,
+      fillColor: "#0e1526",
+      fillOpacity: 0.42,
+      zIndex: 0,
+    });
+    dim.setMap(map);
+    // 커버리지 경계선 — 점선 (행정 경계가 아니라 상권 분포 외곽임을 배지가 설명)
+    const edge = new kakao.maps.Polyline({
+      path: [...hullPath, hullPath[0]],
+      strokeWeight: 1.5,
+      strokeColor: "#e3b65a",
+      strokeOpacity: 0.45,
+      strokeStyle: "longdash",
+    });
+    edge.setMap(map);
+    coverageRef.current = [dim, edge];
+  }, [sangwons]);
 
   // 히트맵 셀 렌더 (업종 먼저 모드)
   useEffect(() => {
@@ -362,6 +449,12 @@ function KakaoMap({
   return (
     <div className="relative h-full w-full">
       <div ref={containerRef} className="h-full w-full" />
+      {/* 서비스 범위 배지 — 커버리지 마스크(점선)가 행정 경계가 아님을 설명 */}
+      <div className="absolute right-4 top-4 z-10 rounded-lg border border-line/70 bg-ink-900/90 px-3 py-1.5 text-[10.5px] leading-relaxed text-muted backdrop-blur">
+        서비스 범위 <b className="text-gold-soft">서울시</b> · 상권{" "}
+        {sangwons.length.toLocaleString()}곳
+        <span className="text-faint"> — 점선은 상권 분포 외곽(근사)</span>
+      </div>
       {/* 주소/장소 검색 — golmok '나는 사장' 점포위치 검색 대응.
           결과 클릭 = 지도 클릭과 동일 경로(onPickPoint → 최근접 상권 매핑) */}
       <PlaceSearch
