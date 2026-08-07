@@ -59,7 +59,9 @@ export default function Home() {
    * 비교하기 위한 토글. 지도·인스펙터는 항상 다크(하이브리드). 저장하지 않는다 —
    * 방향이 정해지면 기본값과 토글 유지 여부를 다시 결정한다.
    */
-  const [reportTheme, setReportTheme] = useState<"dark" | "light">("dark");
+  // 기본 라이트 (2026-08-07 사용자 결정) — 두 모드 유지, 토글로 전환.
+  // 본문 10~13px 한글 가독성이 밝은 배경에서 낫다는 비교 결과. 지도·인스펙터는 항상 다크
+  const [reportTheme, setReportTheme] = useState<"dark" | "light">("light");
   /** 질문형 온보딩에 응답했는지 — 응답 전까지만 시작 카드를 보여준다 */
   const [onboarded, setOnboarded] = useState(false);
   const [industryCode, setIndustryCode] = useState<string>("");
