@@ -1,72 +1,19 @@
 "use client";
 /**
  * DemographicsChart — 유동인구 연령대 구성 미니 차트 (보조 지표)
+ *
+ * 스타일·툴팁·값 라벨은 SliceBarChart 에 위임한다. 예전에는 같은 차트를 두 벌
+ * 복사해 두고 있었고, 그래서 8/7 툴팁 가독성 수정을 두 곳에 각각 넣어야 했다
+ * (한쪽을 빠뜨리면 바로 어긋난다). 연령대 라벨 매핑도 SliceBarChart 가 갖고 있다.
  */
-import {
-  Bar,
-  BarChart,
-  Cell,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-} from "recharts";
-
-const BAND_LABEL: Record<string, string> = {
-  "10s": "10대",
-  "20s": "20대",
-  "30s": "30대",
-  "40s": "40대",
-  "50s": "50대",
-  "60s+": "60+",
-};
+import { SliceBarChart } from "./DetailCharts";
 
 export default function DemographicsChart({
   data,
 }: {
   data: { ageBand: string; ratio: number }[];
 }) {
-  const rows = data.map((d) => ({
-    band: BAND_LABEL[d.ageBand] ?? d.ageBand,
-    pct: Math.round(d.ratio * 1000) / 10,
-  }));
-  const maxPct = Math.max(...rows.map((r) => r.pct), 0);
-
   return (
-    <div className="h-28 w-full">
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={rows} margin={{ top: 6, right: 4, left: 4, bottom: 0 }}>
-          <XAxis
-            dataKey="band"
-            tickLine={false}
-            axisLine={false}
-            tick={{ fill: "#8a95b0", fontSize: 11 }}
-            interval={0}
-          />
-          <Tooltip
-            cursor={{ fill: "rgba(255,255,255,0.04)" }}
-            contentStyle={{
-              background: "#141d33",
-              border: "1px solid #263354",
-              borderRadius: 8,
-              fontSize: 12,
-              color: "#e9edf6",
-            }}
-            // 항목 텍스트는 itemStyle 이 없으면 시리즈 색(어두운 네이비)이라
-            // 다크 배경에 묻힌다 (DetailCharts 의 TOOLTIP_ITEM_STYLE 주석 참조)
-            itemStyle={{ color: "#e9edf6" }}
-            labelStyle={{ color: "#8b93ab", marginBottom: 2 }}
-            formatter={(v) => [`${v}%`, "비율"]}
-          />
-          <Bar dataKey="pct" radius={[3, 3, 0, 0]} isAnimationActive={false}>
-            {rows.map((r) => (
-              <Cell
-                key={r.band}
-                fill={r.pct === maxPct ? "var(--color-gold)" : "#3a486e"}
-              />
-            ))}
-          </Bar>
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
+    <SliceBarChart data={data.map((d) => ({ label: d.ageBand, ratio: d.ratio }))} />
   );
 }

@@ -192,7 +192,7 @@ export default function TopIndustriesPanel({
             </span>
             <span
               className={`h-2 w-2 shrink-0 rounded-full ${r.grade ? GRADE_DOT[r.grade] : ""}`}
-              style={r.grade ? undefined : { background: "#5b6683" }}
+              style={r.grade ? undefined : { background: "var(--color-faint)" }}
               title={
                 r.survivalProbability != null
                   ? `3년 생존율 ${(r.survivalProbability * 100).toFixed(0)}%`

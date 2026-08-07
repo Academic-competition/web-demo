@@ -1365,9 +1365,9 @@ export default function ResultPanel({
 
             {/* 치안 반영 이중 점수 — "포함하면 무엇이 달라지는가"를 사용자가 직접 비교 */}
             {scoreComparison && (
-              <div className="mb-3 rounded-lg border border-[#4ad6c0]/30 bg-[#4ad6c0]/5 px-3.5 py-3">
+              <div className="mb-3 rounded-lg border border-(--color-accent-teal)/30 bg-(--color-accent-teal)/5 px-3.5 py-3">
                 <div className="mb-2 flex items-center gap-1.5">
-                  <span className="text-[10px] font-semibold text-[#4ad6c0]">
+                  <span className="text-[10px] font-semibold text-(--color-accent-teal)">
                     치안 반영 시 종합점수는 이렇게 달라집니다
                   </span>
                   {scoreComparison.isMock && (
@@ -1389,7 +1389,7 @@ export default function ResultPanel({
                   <span className="shrink-0 text-base text-faint">→</span>
                   <div className="flex-1">
                     <div className="text-[9.5px] text-faint">반영 (×95% + 안전점수 5%)</div>
-                    <div className="text-lg font-semibold text-[#4ad6c0]" style={{ fontFamily: "var(--font-numeric)" }}>
+                    <div className="text-lg font-semibold text-(--color-accent-teal)" style={{ fontFamily: "var(--font-numeric)" }}>
                       {scoreComparison.adjusted.toFixed(1)}
                       <span
                         className={`ml-1 text-[10px] ${

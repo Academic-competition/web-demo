@@ -54,6 +54,12 @@ export default function Home() {
 
   const [mode, setMode] = useState<Mode>("location");
   const [view, setView] = useState<View>("analyze");
+  /**
+   * 리포트 패널 배경 (2026-08-07 가독성 실험) — 다크/라이트('종이')를 즉석에서
+   * 비교하기 위한 토글. 지도·인스펙터는 항상 다크(하이브리드). 저장하지 않는다 —
+   * 방향이 정해지면 기본값과 토글 유지 여부를 다시 결정한다.
+   */
+  const [reportTheme, setReportTheme] = useState<"dark" | "light">("dark");
   /** 질문형 온보딩에 응답했는지 — 응답 전까지만 시작 카드를 보여준다 */
   const [onboarded, setOnboarded] = useState(false);
   const [industryCode, setIndustryCode] = useState<string>("");
@@ -391,16 +397,30 @@ export default function Home() {
       </main>
 
       {/* ── 우: 컨트롤 + 결과 패널 ──────────────────────── */}
-      <aside className="panel-texture flex min-h-0 w-full flex-1 shrink-0 flex-col border-t border-line/70 bg-ink-900 lg:w-[520px] lg:flex-none lg:border-l lg:border-t-0 xl:w-[560px]">
+      {/* 리포트 폭 — 표·3단 비교·차트가 들어가는 면이라 좁으면 값이 줄바꿈된다.
+          지도는 남는 폭을 쓰므로 큰 화면에서만 더 넓힌다 (2026-08-07 가독성 작업) */}
+      <aside
+        className={`${reportTheme === "light" ? "report-theme-light " : ""}panel-texture flex min-h-0 w-full flex-1 shrink-0 flex-col border-t border-line/70 bg-ink-900 text-fg lg:w-[560px] lg:flex-none lg:border-l lg:border-t-0 xl:w-[640px] 2xl:w-[720px]`}
+      >
         {/* 브랜드 */}
         <header className="border-b border-line/60 px-6 pb-4 pt-5">
           <div className="flex items-baseline justify-between">
             <h1 className="font-[family-name:var(--font-display)] text-xl font-semibold tracking-tight text-fg">
               상권 <span className="text-gold">인사이트</span>
             </h1>
-            <span className="text-[10px] uppercase tracking-[0.2em] text-faint">
-              AI Research · Demo
-            </span>
+            <div className="flex items-center gap-2">
+              {/* 배경 비교 토글 (가독성 실험) — 리포트 패널만 뒤집는다 */}
+              <button
+                onClick={() => setReportTheme((t) => (t === "dark" ? "light" : "dark"))}
+                className="rounded-md border border-line/70 px-2 py-0.5 text-[10px] text-muted transition hover:border-gold/50 hover:text-fg"
+                title="리포트 패널 배경 전환 — 다크/라이트 비교용"
+              >
+                {reportTheme === "dark" ? "☀ 밝게 보기" : "☾ 어둡게 보기"}
+              </button>
+              <span className="text-[10px] uppercase tracking-[0.2em] text-faint">
+                AI Research · Demo
+              </span>
+            </div>
           </div>
           <p className="mt-1 text-[11px] leading-relaxed text-muted">
             &ldquo;이 자리에 이 업종, 들어가도 될까?&rdquo; — 실측 생존율과 AI 매출 예측으로 답합니다
@@ -526,7 +546,7 @@ export default function Home() {
                     type="checkbox"
                     checked={safetyOn}
                     onChange={(e) => setSafetyOn(e.target.checked)}
-                    className="h-3.5 w-3.5 accent-[#4ad6c0]"
+                    className="h-3.5 w-3.5 accent-(--color-accent-teal)"
                   />
                   치안 반영 <span className="text-faint">(자치구 안전점수 5% 가중)</span>
                   {safetyIsMock ? (
