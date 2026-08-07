@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>보고서 장표</title>
+<style>
+  /* 보고서(hwp, 흰 종이) 삽입용 — 라이트 고정. 팔레트: dataviz 기본(검증 통과) */
+  :root {
+    --surface: #ffffff;
+    --ink: #0b0b0b;
+    --ink-2: #52514e;
+    --ink-3: #8a8985;
+    --line: #e3e2de;
+    --s1: #2a78d6;       /* 우리 모델/서비스 (blue, slot1) */
+    --s1-soft: #d7e6f8;
+    --base: #b9b8b3;     /* 베이스라인/기존 (구조적 회색 — 정체성은 라벨이 짊어짐) */
+    --accent: #eb6834;   /* 강조 1곳 (orange, slot2) */
+    --good: #1baf7a;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #f2f1ee; font-family: "Malgun Gothic", "Segoe UI", sans-serif; padding: 24px; }
+  .fig {
+    width: 1240px; background: var(--surface); border: 1px solid var(--line);
+    margin: 0 auto 28px; padding: 36px 44px 30px; color: var(--ink);
+  }
+  .kicker { font-size: 13px; font-weight: 700; letter-spacing: .14em; color: var(--s1); margin-bottom: 6px; }
+  h2 { font-size: 26px; letter-spacing: -0.01em; margin-bottom: 4px; }
+  .sub { font-size: 14.5px; color: var(--ink-2); margin-bottom: 22px; }
+  .src { margin-top: 18px; padding-top: 10px; border-top: 1px solid var(--line);
+         font-size: 11.5px; color: var(--ink-3); }
+  text { font-family: "Malgun Gothic", "Segoe UI", sans-serif; }
+</style>
+</head>
+<body>
+
+<!-- ============ F1. 파이프라인 ============ -->
+<section class="fig" id="f1">
+  <div class="kicker">FIGURE 1 · 전체 구조</div>
+  <h2>공공 실측 데이터에서 창업 의사결정까지</h2>
+  <p class="sub">모든 수치는 모델 저장소 파이프라인이 산출하고, 웹은 정렬·표시만 한다 — 숫자를 새로 만들지 않는다.</p>
+  <svg width="1152" height="430" viewBox="0 0 1152 430">
+    <!-- 3열 박스 -->
+    <g font-size="15">
+      <!-- 원천 -->
+      <rect x="0" y="30" width="320" height="330" rx="12" fill="#f7f6f3" stroke="#e3e2de"/>
+      <text x="24" y="66" font-size="17" font-weight="700" fill="#0b0b0b">서울시 공공데이터 (실측)</text>
+      <text x="24" y="90" font-size="12.5" fill="#8a8985">열린데이터광장 API · 분기 단위</text>
+      <g fill="#52514e" font-size="14">
+        <text x="24" y="128">· 추정매출 — 21.8만 행 (구성·추이)</text>
+        <text x="24" y="158">· 점포·개폐업 — 76.7만 행</text>
+        <text x="24" y="188">· 유동인구 (요일·시간·연령)</text>
+        <text x="24" y="218">· 상주·직장인구·가구</text>
+        <text x="24" y="248">· 상권 영역 (좌표·면적)</text>
+        <text x="24" y="278">· 범죄·CCTV·임대시세 (자치구)</text>
+      </g>
+      <!-- 모델 -->
+      <rect x="416" y="30" width="320" height="330" rx="12" fill="#eef4fc" stroke="#2a78d6" stroke-width="1.5"/>
+      <text x="440" y="66" font-size="17" font-weight="700" fill="#0b0b0b">모델 파이프라인</text>
+      <text x="440" y="90" font-size="12.5" fill="#8a8985">수집 → 검증 → 학습 → 집계</text>
+      <g font-size="14">
+        <text x="440" y="128" fill="#2a78d6" font-weight="700">■ 매출 예측 모델 (ML)</text>
+        <text x="456" y="150" fill="#52514e" font-size="13">RandomForest · 19.2만 행 학습</text>
+        <text x="456" y="170" fill="#52514e" font-size="13">타깃: 다음 분기 점포당 매출</text>
+        <text x="440" y="204" fill="#0b0b0b">■ 통계 가공 (산식 공개)</text>
+        <text x="456" y="226" fill="#52514e" font-size="13">생존율 환산·축소추정 / 밀도·중앙값</text>
+        <text x="456" y="246" fill="#52514e" font-size="13">종합진단 점수 / 랭킹·소표본 판정</text>
+        <text x="440" y="280" fill="#0b0b0b">■ 규칙 판정 (결정적)</text>
+        <text x="456" y="302" fill="#52514e" font-size="13">신호등 / 시장단계 / 해석 문장</text>
+        <text x="456" y="322" fill="#52514e" font-size="13">(생성형 미사용 — 환각 위험 0)</text>
+      </g>
+      <!-- 서비스 -->
+      <rect x="832" y="30" width="320" height="330" rx="12" fill="#f7f6f3" stroke="#e3e2de"/>
+      <text x="856" y="66" font-size="17" font-weight="700" fill="#0b0b0b">웹 서비스 "상권 인사이트"</text>
+      <text x="856" y="90" font-size="12.5" fill="#8a8985">62업종 × 1,570상권 · 표시 계층</text>
+      <g fill="#52514e" font-size="14">
+        <text x="856" y="128">· 상권 분석 — 8섹션 리포트</text>
+        <text x="856" y="158">· 뜨는 상권 — 지표 14종 랭킹</text>
+        <text x="856" y="188">· 비교함 — 후보 3개 나란히</text>
+        <text x="856" y="218">· 지도 — 검색·히트맵·범위 안내</text>
+        <text x="856" y="256" font-size="13" fill="#8a8985">모든 숫자에 출처 라벨 + 실시간</text>
+        <text x="856" y="276" font-size="13" fill="#8a8985">계보 공개 (AI 인스펙터)</text>
+      </g>
+    </g>
+    <!-- 화살표 -->
+    <g stroke="#8a8985" stroke-width="2" fill="#8a8985">
+      <line x1="326" y1="195" x2="404" y2="195"/><polygon points="404,189 416,195 404,201"/>
+      <line x1="742" y1="195" x2="820" y2="195"/><polygon points="820,189 832,195 820,201"/>
+    </g>
+    <text x="364" y="180" font-size="12" fill="#8a8985" text-anchor="middle">수집·정합성</text>
+    <text x="364" y="215" font-size="12" fill="#8a8985" text-anchor="middle">검증</text>
+    <text x="780" y="180" font-size="12" fill="#8a8985" text-anchor="middle">정적 산출물</text>
+    <text x="780" y="215" font-size="12" fill="#8a8985" text-anchor="middle">(서버 불필요)</text>
+    <text x="0" y="410" font-size="13" fill="#52514e">데이터 정합성 검증 사례 — 점포 수 정의(프랜차이즈 제외) 76.7만 행 전수 확인 · 매출의 분기 단위를 공식 서비스와 교차 실증</text>
+  </svg>
+  <div class="src">데이터: 서울 열린데이터광장 상권분석서비스 (2023Q1~2026Q1) · 경찰청 2024 · 서울시 CCTV 2025 · 한국부동산원 R-ONE</div>
+</section>
+
+<!-- ============ F2. 모델 성능 ============ -->
+<section class="fig" id="f2">
+  <div class="kicker">FIGURE 2 · 모델 성능</div>
+  <h2>실패를 진단해 역전하다 — 예측오차(MAE) 비교</h2>
+  <p class="sub">시험은 학습에 쓰지 않은 분기. 베이스라인은 "다음 분기 = 지난 분기" 규칙 — 분기 데이터에서 매우 강력한 상대다.</p>
+  <svg width="1152" height="400" viewBox="0 0 1152 400">
+    <!-- y grid: MAE 만원 0~1500 -->
+    <g stroke="#eeede9"><line x1="70" y1="60" x2="1120" y2="60"/><line x1="70" y1="150" x2="1120" y2="150"/><line x1="70" y1="240" x2="1120" y2="240"/></g>
+    <g font-size="12" fill="#8a8985" text-anchor="end">
+      <text x="62" y="64">1,500만</text><text x="62" y="154">1,000만</text><text x="62" y="244">500만</text><text x="62" y="334">0</text>
+    </g>
+    <line x1="70" y1="330" x2="1120" y2="330" stroke="#c9c8c3" stroke-width="1.5"/>
+    <!-- v1 그룹 (x 180-480): naive 1357 → h=244, ML 1378 → h=248 ; scale 0.18px/만 -->
+    <!-- height = value * 0.18 -->
+    <g>
+      <rect x="200" y="85.7" width="110" height="244.3" fill="#b9b8b3" rx="4"/>
+      <rect x="200" y="326" width="110" height="4" fill="#b9b8b3"/>
+      <rect x="330" y="82.0" width="110" height="248.0" fill="#2a78d6" rx="4"/>
+      <rect x="330" y="326" width="110" height="4" fill="#2a78d6"/>
+      <text x="255" y="76" font-size="14" text-anchor="middle" fill="#52514e">1,357만</text>
+      <text x="385" y="72" font-size="14" text-anchor="middle" fill="#0b0b0b" font-weight="700">1,378만</text>
+      <text x="255" y="352" font-size="13.5" text-anchor="middle" fill="#52514e">나이브 규칙</text>
+      <text x="385" y="352" font-size="13.5" text-anchor="middle" fill="#52514e">ML (v1)</text>
+      <text x="320" y="384" font-size="15" text-anchor="middle" fill="#0b0b0b" font-weight="700">v1 — ML 이 1.5% 열세</text>
+    </g>
+    <!-- 진단 화살표 -->
+    <g>
+      <rect x="500" y="120" width="180" height="150" rx="10" fill="#fdf1ec" stroke="#eb6834"/>
+      <text x="590" y="150" font-size="13.5" text-anchor="middle" fill="#eb6834" font-weight="700">원인 진단 (실험 4건)</text>
+      <text x="590" y="178" font-size="12.5" text-anchor="middle" fill="#52514e">✓ 타깃 분모 오염 교정</text>
+      <text x="590" y="200" font-size="12.5" text-anchor="middle" fill="#52514e">✓ 검증셋 1→2분기 확대</text>
+      <text x="590" y="222" font-size="12.5" text-anchor="middle" fill="#8a8985">✗ 인구 피처 (±0.03%)</text>
+      <text x="590" y="244" font-size="12.5" text-anchor="middle" fill="#8a8985">✗ 외부 피처 (0.5%)</text>
+    </g>
+    <!-- v2 그룹 (x 720-1020): naive 1067 → h=192, ML 1038 → h=187 -->
+    <g>
+      <rect x="740" y="137.9" width="110" height="192.1" fill="#b9b8b3" rx="4"/>
+      <rect x="740" y="326" width="110" height="4" fill="#b9b8b3"/>
+      <rect x="870" y="143.2" width="110" height="186.8" fill="#2a78d6" rx="4"/>
+      <rect x="870" y="326" width="110" height="4" fill="#2a78d6"/>
+      <text x="795" y="128" font-size="14" text-anchor="middle" fill="#52514e">1,067만</text>
+      <text x="925" y="134" font-size="14" text-anchor="middle" fill="#0b0b0b" font-weight="700">1,038만</text>
+      <text x="795" y="352" font-size="13.5" text-anchor="middle" fill="#52514e">나이브 규칙</text>
+      <text x="925" y="352" font-size="13.5" text-anchor="middle" fill="#52514e">ML (v2)</text>
+      <text x="860" y="384" font-size="15" text-anchor="middle" fill="#2a78d6" font-weight="700">v2 — ML 이 2.7% 우위 ✓</text>
+    </g>
+    <!-- 범례 -->
+    <g font-size="12.5" fill="#52514e">
+      <rect x="70" y="20" width="12" height="12" fill="#b9b8b3" rx="2"/><text x="88" y="31">나이브 베이스라인</text>
+      <rect x="210" y="20" width="12" height="12" fill="#2a78d6" rx="2"/><text x="228" y="31">우리 모델 (점포당 분기 매출 MAE, 만원)</text>
+    </g>
+  </svg>
+  <div class="src">test 분기 채점 (model_metadata.json) · v2: RandomForest, SMAPE 26.5%, R² 0.94, 학습 191,643행 · 진단 실험: MODEL-EXPERIMENT-REPORT</div>
+</section>
+
+<!-- ============ F3. 파급 체인 ============ -->
+<section class="fig" id="f3">
+  <div class="kicker">FIGURE 3 · 모델 → 서비스</div>
+  <h2>예측 하나가 판단 체계 전체를 움직인다</h2>
+  <p class="sub">종합진단은 예측 없이는 산출이 차단된다(정책) — 사용자가 보는 순위·판정은 전부 ML 예측을 1차 입력으로 한다.</p>
+  <svg width="1152" height="380" viewBox="0 0 1152 380">
+    <!-- 좌: 예측 -->
+    <rect x="0" y="130" width="230" height="110" rx="12" fill="#2a78d6"/>
+    <text x="115" y="175" font-size="17" font-weight="700" fill="#fff" text-anchor="middle">점포당 매출 예측</text>
+    <text x="115" y="200" font-size="12.5" fill="#d7e6f8" text-anchor="middle">RandomForest · 분기</text>
+    <!-- 직접 표시 -->
+    <g>
+      <rect x="330" y="20" width="250" height="90" rx="10" fill="#eef4fc" stroke="#2a78d6"/>
+      <text x="455" y="55" font-size="14.5" font-weight="700" fill="#0b0b0b" text-anchor="middle">직접 표시</text>
+      <text x="455" y="80" font-size="12.5" fill="#52514e" text-anchor="middle">③ 예상 매출 · 히트맵 색 · 업종 랭킹</text>
+    </g>
+    <!-- 백분위 → 진단 -->
+    <g>
+      <rect x="330" y="150" width="250" height="90" rx="10" fill="#eef4fc" stroke="#2a78d6"/>
+      <text x="455" y="180" font-size="14.5" font-weight="700" fill="#0b0b0b" text-anchor="middle">업종 내 백분위</text>
+      <text x="455" y="203" font-size="12.5" fill="#52514e" text-anchor="middle">= 종합진단 최대 가점 성분</text>
+      <text x="455" y="222" font-size="12.5" fill="#2a78d6" text-anchor="middle" font-weight="700">매출잠재력 30%</text>
+    </g>
+    <g>
+      <rect x="330" y="280" width="250" height="80" rx="10" fill="#f7f6f3" stroke="#e3e2de"/>
+      <text x="455" y="312" font-size="14.5" font-weight="700" fill="#0b0b0b" text-anchor="middle">예측 신뢰도 병기</text>
+      <text x="455" y="336" font-size="12.5" fill="#52514e" text-anchor="middle">업종 ±21% · 상권유형 ±26.7% (채점표)</text>
+    </g>
+    <!-- 종합진단 -->
+    <rect x="680" y="150" width="200" height="90" rx="10" fill="#0b0b0b"/>
+    <text x="780" y="185" font-size="15" font-weight="700" fill="#fff" text-anchor="middle">종합진단 점수</text>
+    <text x="780" y="210" font-size="11.5" fill="#b9b8b3" text-anchor="middle">가점 75% − 감점 25%</text>
+    <text x="780" y="228" font-size="11" fill="#b9b8b3" text-anchor="middle">예측 없으면 산출 금지</text>
+    <!-- 최종 출력들 -->
+    <g font-size="13.5">
+      <rect x="960" y="60" width="192" height="58" rx="9" fill="#f7f6f3" stroke="#e3e2de"/>
+      <text x="1056" y="95" text-anchor="middle" fill="#0b0b0b">① 진단 카드 (점수·등급)</text>
+      <rect x="960" y="132" width="192" height="58" rx="9" fill="#f7f6f3" stroke="#e3e2de"/>
+      <text x="1056" y="167" text-anchor="middle" fill="#0b0b0b">업종 기회 순위</text>
+      <rect x="960" y="204" width="192" height="58" rx="9" fill="#f7f6f3" stroke="#e3e2de"/>
+      <text x="1056" y="239" text-anchor="middle" fill="#0b0b0b">히트맵 종합점수 색</text>
+      <rect x="960" y="276" width="192" height="58" rx="9" fill="#f7f6f3" stroke="#e3e2de"/>
+      <text x="1056" y="311" text-anchor="middle" fill="#0b0b0b">강점·리스크 문장 1순위</text>
+    </g>
+    <!-- 화살표 -->
+    <g stroke="#8a8985" stroke-width="2" fill="#8a8985">
+      <line x1="236" y1="160" x2="318" y2="70"/><polygon points="314,64 330,65 320,78"/>
+      <line x1="236" y1="190" x2="318" y2="192"/><polygon points="318,186 330,192 318,198"/>
+      <line x1="236" y1="222" x2="318" y2="315"/><polygon points="314,306 330,318 318,322"/>
+      <line x1="586" y1="192" x2="668" y2="192"/><polygon points="668,186 680,192 668,198"/>
+      <line x1="886" y1="180" x2="948" y2="95"/><polygon points="944,88 960,88 950,102"/>
+      <line x1="886" y1="192" x2="948" y2="163"/><polygon points="946,156 960,160 950,172"/>
+      <line x1="886" y1="205" x2="948" y2="230"/><polygon points="946,222 960,234 948,240"/>
+      <line x1="886" y1="218" x2="948" y2="300"/><polygon points="942,294 960,304 948,310"/>
+    </g>
+  </svg>
+  <div class="src">근거: diagnosis.py — sales_potential_score = 예측값 업종 내 백분위 · overall_score 는 이 성분 결측 시 산출 금지 (정책)</div>
+</section>
+
+<!-- ============ F4. 신뢰성 ============ -->
+<section class="fig" id="f4">
+  <div class="kicker">FIGURE 4 · 신뢰성 설계</div>
+  <h2>예측을 정직하게 파는 네 가지 장치</h2>
+  <p class="sub">정확도만으로 신뢰를 만들 수 없다 — 한계를 화면이 스스로 밝힌다.</p>
+  <svg width="1152" height="330" viewBox="0 0 1152 330">
+    <g font-size="13.5">
+      <rect x="0" y="10" width="558" height="140" rx="12" fill="#f7f6f3" stroke="#e3e2de"/>
+      <text x="24" y="44" font-size="15.5" font-weight="700" fill="#0b0b0b">① 예측 신뢰도 상시 표기</text>
+      <text x="24" y="72" fill="#52514e">학습에 안 쓴 분기로 채점한 오차를 예측값 옆에 항상 표시</text>
+      <rect x="24" y="90" width="380" height="38" rx="8" fill="#eef4fc" stroke="#2a78d6"/>
+      <text x="40" y="114" fill="#2a78d6" font-weight="700" font-size="13">"이 업종 test 오차 ±21% · 직장형 상권에서는 ±25.9%"</text>
+
+      <rect x="594" y="10" width="558" height="140" rx="12" fill="#f7f6f3" stroke="#e3e2de"/>
+      <text x="618" y="44" font-size="15.5" font-weight="700" fill="#0b0b0b">② 소표본 극단값 자동 경고</text>
+      <text x="618" y="72" fill="#52514e">점포 몇 개 평균이라 값이 튀는 상권은 경고문 자동 부착</text>
+      <rect x="618" y="90" width="510" height="38" rx="8" fill="#fdf1ec" stroke="#eb6834"/>
+      <text x="634" y="114" fill="#c04e1f" font-size="12.5">⚠ "업종 중앙값의 23배 · 점포 8개 평균 — 개별 점포 기대 매출로 읽지 마세요"</text>
+
+      <rect x="0" y="170" width="558" height="140" rx="12" fill="#f7f6f3" stroke="#e3e2de"/>
+      <text x="24" y="204" font-size="15.5" font-weight="700" fill="#0b0b0b">③ 생존율 축소추정 (Empirical Bayes)</text>
+      <text x="24" y="232" fill="#52514e">소표본 상권의 폐업률을 업종 평균으로 보정 —</text>
+      <text x="24" y="254" fill="#52514e">보정 없이는 표본 부족 상권 76.8% 가 "생존율 100%" 로 표시</text>
+      <text x="24" y="288" fill="#8a8985" font-size="12.5">보정 폐업률 = (관측 폐업 + k×업종 사전률) ÷ (노출 + k),  k=20</text>
+
+      <rect x="594" y="170" width="558" height="140" rx="12" fill="#f7f6f3" stroke="#e3e2de"/>
+      <text x="618" y="204" font-size="15.5" font-weight="700" fill="#0b0b0b">④ 숫자별 출처 계보 실시간 공개</text>
+      <text x="618" y="232" fill="#52514e">화면의 모든 숫자를 분류해 콘솔로 공개 (AI 인스펙터)</text>
+      <rect x="618" y="250" width="440" height="38" rx="8" fill="#111827"/>
+      <text x="634" y="274" fill="#7dd3a8" font-size="12.5" font-family="Consolas,monospace">계보 — ML 예측 1 · 통계 가공 7 · 실측 6 · 규칙 4</text>
+    </g>
+  </svg>
+  <div class="src">해석 문장은 조건부 규칙(결정적) — 생성형 미사용으로 수치 왜곡·환각 위험이 구조적으로 없음. 같은 입력 = 같은 출력 (재현 가능)</div>
+</section>
+
+<!-- ============ F5. 폐업 실험 ============ -->
+<section class="fig" id="f5">
+  <div class="kicker">FIGURE 5 · 확장 실험</div>
+  <h2>폐업 위험 예측 — 위험 상권을 절반 더 잘 찾아낸다</h2>
+  <p class="sub">다음 분기 폐업률을 ML 로 예측 vs 현행 통계(축소추정). walk-forward 4폴드, 매출 모델과 동일 방법론.</p>
+  <svg width="1152" height="360" viewBox="0 0 1152 360">
+    <!-- 패널 1: Spearman (0~0.35) -->
+    <g>
+      <text x="140" y="30" font-size="15" font-weight="700" fill="#0b0b0b">순위 상관 (Spearman)</text>
+      <text x="140" y="52" font-size="12" fill="#8a8985">위험 순서를 얼마나 맞히나</text>
+      <line x1="80" y1="290" x2="480" y2="290" stroke="#c9c8c3" stroke-width="1.5"/>
+      <!-- scale: 0.35 → 210px => 600px/unit -->
+      <rect x="140" y="186.2" width="120" height="103.8" fill="#b9b8b3" rx="4"/>
+      <rect x="300" y="115.4" width="120" height="174.6" fill="#2a78d6" rx="4"/>
+      <text x="200" y="176" font-size="15" text-anchor="middle" fill="#52514e">0.173</text>
+      <text x="360" y="105" font-size="15" text-anchor="middle" fill="#0b0b0b" font-weight="700">0.291</text>
+      <text x="200" y="314" font-size="13" text-anchor="middle" fill="#52514e">현행 (축소추정)</text>
+      <text x="360" y="314" font-size="13" text-anchor="middle" fill="#52514e">ML 예측</text>
+      <text x="280" y="345" font-size="15" text-anchor="middle" fill="#2a78d6" font-weight="700">+68%</text>
+    </g>
+    <!-- 패널 2: top10% capture (0~30%) -->
+    <g>
+      <text x="680" y="30" font-size="15" font-weight="700" fill="#0b0b0b">위험 상위 10% 조합 포착률</text>
+      <text x="680" y="52" font-size="12" fill="#8a8985">실제 고위험 조합을 예측 상위에서 잡은 비율</text>
+      <line x1="620" y1="290" x2="1020" y2="290" stroke="#c9c8c3" stroke-width="1.5"/>
+      <!-- scale: 30% → 210px => 7px/% -->
+      <rect x="680" y="177.3" width="120" height="112.7" fill="#b9b8b3" rx="4"/>
+      <rect x="840" y="122" width="120" height="168" fill="#2a78d6" rx="4"/>
+      <text x="740" y="167" font-size="15" text-anchor="middle" fill="#52514e">16.1%</text>
+      <text x="900" y="112" font-size="15" text-anchor="middle" fill="#0b0b0b" font-weight="700">24.0%</text>
+      <text x="740" y="314" font-size="13" text-anchor="middle" fill="#52514e">현행 (축소추정)</text>
+      <text x="900" y="314" font-size="13" text-anchor="middle" fill="#52514e">ML 예측</text>
+      <text x="820" y="345" font-size="15" text-anchor="middle" fill="#2a78d6" font-weight="700">+49%</text>
+    </g>
+    <text x="1036" y="200" font-size="12" fill="#52514e">
+      <tspan x="1036" dy="0">절대 오차(MAE)도</tspan>
+      <tspan x="1036" dy="20">4/4 폴드 우위</tspan>
+      <tspan x="1036" dy="20">(+2.1%)</tspan>
+    </text>
+  </svg>
+  <div class="src">타당성 실험 (2026-08-07, 파이프라인 머신) — 정본 편입은 향후 과제로 제안 (MODEL-REQUESTS §6). 서비스 신호등의 목적 = 위험 조합을 놓치지 않는 것</div>
+</section>
+
+</body>
+</html>
