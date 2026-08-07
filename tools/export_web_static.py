@@ -292,12 +292,13 @@ def load_safety_by_gu(repo: str, sv) -> tuple[dict, dict]:
     return detail_by_gu, scores_meta
 
 
-def build_rankings(sales, pop, store, sv, repo: str, out: str) -> dict:
+def build_rankings(sales, pop, store, sv, repo: str, out: str, data_as_of: str) -> dict:
     """
     상권·행정동 지표 랭킹 재료 — golmok '뜨는 상권/뜨는 동네' 대응 (2026-08-06).
 
     지표 5종(점포수·매출·유동인구·상주인구·직장인구)의 상권별
-    {value, prev, changePct} 를 meta/rankings.json.gz 로 내보낸다.
+    {value, prev, changePct} + **밀도 3종**(2026-08-07 추가, 아래 별도 블록)을
+    meta/rankings.json.gz 로 내보낸다.
     행정동(byDong)은 상권 값을 서빙 테이블의 상권→행정동 매핑으로 **합산**한 것.
     행정동 키는 이름이 아니라 코드다 — 신사동처럼 서울 안에서 이름이 중복된다
     (강남구/은평구). 서빙에 없는 상권(원본에만 있는 ~80개)은 매핑이 없어
@@ -432,6 +433,88 @@ def build_rankings(sales, pop, store, sv, repo: str, out: str) -> dict:
                 "lowBase": (prev is None or prev < prev_median),
             }
 
+    # ---- 밀도 3종 (명/km²) — 서빙 스냅샷 기반, **수준 랭킹 전용** (2026-08-07) ----
+    # "서울에서 어디가 밀집인가"에 답하는 유일한 화면이다. 리포트 ⑤ 4단 비교는 선택한
+    # 상권 하나만 답하고, 위 인구 지표는 전부 절대값(명)이라 면적 대비를 못 본다.
+    # 지도 레이어 대신 랭킹으로 답하기로 결정 (GOLMOK-PARITY §2 — 업종 히트맵과
+    # UI 모드가 충돌해 레이어는 보류).
+    #
+    # 증가율을 내보내지 않는 이유: 면적은 분기 간 불변이므로 밀도 증가율 = 인구 증가율,
+    # 즉 footTraffic/resident/worker 증가율 랭킹과 순위가 **완전히 같은 중복 지표**가 된다.
+    # levelOnly 로 선언해 UI 가 증가율 정렬 토글 자체를 감춘다.
+    # 유동인구 밀도는 분자가 **분기 연인원**이라 서울 중앙값이 824만 명/km² 다 —
+    # 상주(2.5만)·직장(0.76만)과 자릿수가 달라 라벨에 (분기)를 박지 않으면 오독한다.
+    # 리포트 ⑤ 타일이 이미 "유동 (분기)" 로 밝히고 있어 같은 기준을 쓴다.
+    # (÷91 로 일평균 환산하는 선택지도 있으나, 원천에 없는 수를 만들지 않는다는
+    #  기존 방침대로 값은 그대로 두고 기준만 표기한다 — '월매출' 정정과 같은 원칙)
+    DENS_DEFS = [
+        # scope 는 UI 가 "{scope} 기준." 으로 이어 붙인다 — 서술문이 아니라 명사구로 쓸 것
+        ("footTrafficDensity", "foot_traffic_density_km2", "유동인구 밀도 (분기)",
+         " · 유동인구는 분기 연인원"),
+        ("residentDensity", "resident_density_km2", "상주인구 밀도", ""),
+        ("workerDensity", "worker_density_km2", "직장인구 밀도", ""),
+    ]
+    _sw_area = sv.drop_duplicates("상권_코드")
+    # 면적 하위 5% 는 분모가 작아 밀도가 과대해진다 (최소 1,854m² = 중앙값 75,550m² 의 1/40).
+    # 값이 틀린 게 아니라 '밀집한 동네' 질문의 답이 못 되는 것 — 증가율의 lowBase 와 취지가
+    # 같아 같은 플래그로 싣고, 제외 사실과 기준을 lowBaseNote 로 UI 에 넘겨 밝히게 한다.
+    _area_m2 = pd.to_numeric(_sw_area["영역_면적"], errors="coerce")
+    area_floor = float(_area_m2.quantile(0.05)) if _area_m2.notna().any() else 0.0
+    for key, col, label, scope_extra in DENS_DEFS:
+        if col not in _sw_area.columns:
+            print(f"      ⚠️ 밀도 {key} 생략 — 서빙에 {col} 없음")
+            continue
+        d_pop: dict[int, float] = {}    # 동 집계 — 인구(밀도×면적)와 면적을 따로 모은다
+        d_area: dict[int, float] = {}
+        n_low = 0
+        for r in _sw_area.itertuples():
+            value = num(getattr(r, col, None))
+            if value is None:
+                continue
+            area = num(getattr(r, "영역_면적", None))
+            code = int(r.상권_코드)
+            low = area is not None and area < area_floor
+            n_low += int(low)
+            by_sangwon.setdefault(str(code), {})[key] = {
+                "value": value, "prev": None, "changePct": None, "lowBase": low,
+            }
+            m = dong_of.get(code)
+            if m is not None and area:
+                d_pop[m[0]] = d_pop.get(m[0], 0.0) + value * (area / 1_000_000)
+                d_area[m[0]] = d_area.get(m[0], 0.0) + area / 1_000_000
+        for dcode, area_km2 in d_area.items():
+            if not area_km2:
+                continue
+            name_gu = dong_name.get(dcode)
+            entry = by_dong.setdefault(str(int(dcode)), {
+                "name": name_gu[0] if name_gu else None,
+                "gu": name_gu[1] if name_gu else None,
+                "metrics": {},
+            })
+            # 동 밀도는 밀도의 평균이 아니라 Σ인구/Σ면적 (면적 가중) — 작은 상권의 큰
+            # 밀도가 동 전체를 대표하지 않게 한다. 합산이 성립하지 않는 유일한 지표라
+            # 위 루프의 단순 합산 경로를 쓰지 않는다.
+            entry["metrics"][key] = {
+                "value": round(d_pop[dcode] / area_km2, 1),
+                "prev": None, "changePct": None,
+                # 동은 여러 상권의 면적 합이라 분모 과소가 희석된다 — 397개 중 면적 하한
+                # 미달 2개뿐이고, 상위권(여의동·삼성1동·도곡2동)은 분모 artifact 가 아니라
+                # 실제 오피스 밀집이다 (2026-08-07 실측). 그래서 제외 대상으로 잡지 않는다.
+                "lowBase": False,
+            }
+        metrics_meta[key] = {
+            "label": label, "unit": "명/km²",
+            "scope": ("상권 영역 면적 기준 환산 · 동네는 Σ인구/Σ면적 (면적 가중 — 합산 아님)"
+                      + scope_extra),
+            "asOf": data_as_of,
+            "lowBaseThreshold": round(area_floor / 1_000_000, 4),  # 이 지표만 km² (면적 하한)
+            "subOf": None,
+            "levelOnly": True,
+            "lowBaseNote": (f"면적 하위 5%({area_floor / 1_000_000:.4f}km² 미만) 상권 {n_low}개는 "
+                            "분모가 작아 밀도가 과대해져 순위에서 제외했습니다 "
+                            "(값 자체는 각 상권 리포트 ⑤에 그대로 있습니다)."),
+        }
+
     # 드릴다운(동네 → 상권)용 — 상권이 속한 행정동 코드
     dong_code_of_sangwon = {str(c): m[0] for c, m in dong_of.items()}
 
@@ -439,14 +522,18 @@ def build_rankings(sales, pop, store, sv, repo: str, out: str) -> dict:
         "metrics": metrics_meta,
         "note": "상권·행정동 지표 랭킹 재료. 값·증감률은 파이프라인 산출이며 "
                 "웹은 정렬·표시만 한다. 점포수·매출은 생활밀접업종 62종 합계 기준. "
-                "행정동은 상권 값의 합산 — 서빙에 없는 상권은 동 집계에서 제외.",
+                "행정동은 상권 값의 합산 — 서빙에 없는 상권은 동 집계에서 제외. "
+                "단 밀도 3종은 합산이 아니라 Σ인구/Σ면적(면적 가중)이며, 면적이 분기 간 "
+                "불변이라 증가율은 인구 증가율과 같아 내보내지 않는다(levelOnly).",
         "bySangwon": by_sangwon,
         "sangwonDong": dong_code_of_sangwon,
         "byDong": by_dong,
     }
     write_json_gz(os.path.join(out, "meta", "rankings.json.gz"), doc)
     return {"sangwons": len(by_sangwon), "dongs": len(by_dong),
-            "asOf": "/".join(m["asOf"] for m in metrics_meta.values())}
+            "metrics": len(metrics_meta),
+            # 지표마다 기준 분기가 다르다 — 중복만 접어서 보여준다 (순서 유지)
+            "asOf": "/".join(dict.fromkeys(m["asOf"] for m in metrics_meta.values()))}
 
 
 def rebuild_hinterland(repo: str, out: str) -> dict | None:
@@ -920,8 +1007,9 @@ def main() -> int:
         print(f"      ⚠️ 치안 생략 (data/raw/external/ 없음?): {e}")
 
     # 상권 지표 랭킹 재료 (golmok '뜨는 상권' 대응 — build_rankings 주석 참조)
-    rank = build_rankings(sales, pop, store, sv, repo, out)
-    print(f"      랭킹: 상권 {rank['sangwons']:,} · 행정동 {rank['dongs']:,} · asOf {rank['asOf']}")
+    rank = build_rankings(sales, pop, store, sv, repo, out, data_as_of)
+    print(f"      랭킹: 상권 {rank['sangwons']:,} · 행정동 {rank['dongs']:,}"
+          f" · 지표 {rank['metrics']}종 · asOf {rank['asOf']}")
 
     # 배후지: 상주·직장인구 블록을 모델 저장소 CSV 로 교체 (rebuild_hinterland 주석 참조)
     hint = rebuild_hinterland(repo, out)

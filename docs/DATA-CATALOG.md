@@ -118,18 +118,24 @@
 | `meta/safety-scores.json` | 자치구 25 안전점수+죄종 상세 (서빙 `score_safety_gu` 단일 소스) | ⑥·치안 토글 |
 | `meta/hinterland.json.gz` | 배후지 1,633+ 상권 | ⑦ |
 | `meta/closure-priors.json` | 업종 사전 폐업률 | 라이브 경로 축소추정 |
-| `meta/rankings.json.gz` | 상권 1,650 × 지표 5종 (값·전분기 증감·lowBase 판정) | `/api/rankings` → 초기 화면 '뜨는 상권' (`TrendingPanel`) |
+| `meta/rankings.json.gz` | 상권 1,650 × 지표 5종 + 유동 연령 6종 + **밀도 3종(8/7, 재생성 대기)** (값·전분기 증감·lowBase 판정) | `/api/rankings` → 초기 화면 '뜨는 상권' (`TrendingPanel`) |
 
 ## 4. 활용 후보 재고 — **2026-08-05 전량 소진**
 
 "모델이 주는 것 전부 구현 후 하나씩 의논하며 제거" 방침에 따라 1~5번을 모두 구현했다
 (전부 optional — 재생성 후 등장). 남은 것:
 
-1. ~~market_stage~~ ✅ · ~~인구 밀도~~ ✅(⑤ 타일 — 지도 레이어는 별도 선택 과제) ·
+0. **밀도 3종의 '뜨는 상권' 랭킹 편입 (2026-08-07)** — 지도 레이어 대신 택한 경로.
+   `footTrafficDensity`/`residentDensity`/`workerDensity`, 명/km², 수준 랭킹 전용
+   (면적 불변 → 밀도 증가율 = 인구 증가율이라 중복). 동네는 Σ인구/Σ면적(면적 가중).
+   웹·export 완료, **`model-exports/` 재생성 1회 대기** — 판단 근거는
+   [GOLMOK-PARITY.md](GOLMOK-PARITY.md) §2·§5
+1. ~~market_stage~~ ✅ · ~~인구 밀도~~ ✅(⑤ 타일 — 지도 레이어는 랭킹으로 대체, 위 0번) ·
    ~~strengths/risks~~ ✅ · ~~by_commercial_type 이중 신뢰도~~ ✅ · ~~점수 성분 분해~~ ✅(① 카드)
 2. `by_sales_size` 채점 — **웹 표시 불가** (위 §2 사유), 발표 자료용
 3. `walk_forward` — 웹 리포트 성격 아님, 발표 슬라이드용 (분기별 성적 흐름)
-4. (선택) 밀도 3종의 **지도 레이어** 버전 — ⑤ 타일로 일단 제공, 레이어는 지도 UX 작업
+4. ~~(선택) 밀도 3종의 **지도 레이어** 버전~~ → **폐기 (8/7)** — 업종 히트맵과 UI 모드가
+   충돌해 랭킹(위 0번)으로 대체했다. 되살리려면 GOLMOK-PARITY §2 의 사유부터 볼 것
 
 > ⚠️ 항목 추가 시 규칙 (CLAUDE.md): 계약은 optional 로, `provenance.ts` 계보 행 추가,
 > 운반은 `export_web_static.py` 수정 후 **파이프라인 머신에서 재생성**.

@@ -617,6 +617,11 @@ export const RankingMetricKey = z.enum([
   "footTraffic",
   "resident",
   "worker",
+  // 밀도 3종 (명/km²) — 수준 랭킹 전용. 위 인구 지표가 전부 절대값이라
+  // "면적 대비 밀집"에 답하지 못하는 공백을 메운다 (지도 레이어 대신 택한 경로)
+  "footTrafficDensity",
+  "residentDensity",
+  "workerDensity",
 ]);
 export type RankingMetricKey = z.infer<typeof RankingMetricKey>;
 
@@ -627,10 +632,24 @@ export const RankingMetricMeta = z.object({
   scope: z.string(),
   /** 지표별 기준 분기 — 매출·점포·유동 2025Q2 vs 상주·직장 2026Q1 처럼 다르다 */
   asOf: z.string(),
-  /** 소표본(lowBase) 판정에 쓴 직전 분기 중앙값 — 근거 표기용 */
+  /**
+   * 소표본(lowBase) 판정에 쓴 직전 분기 중앙값 — 근거 표기용.
+   * ⚠️ 밀도 지표만 의미가 다르다: 분모(영역 면적)의 하한 km² 다.
+   */
   lowBaseThreshold: z.number().nullable(),
   /** 서브 지표 (예: footTraffic_20 → "footTraffic") — 최상위 토글에 안 뜬다 */
   subOf: z.string().nullable().optional(),
+  /**
+   * 증가율이 없는 지표 (밀도 3종) — UI 가 증가율 정렬 토글을 감춘다.
+   * 면적이 분기 간 불변이라 밀도 증가율 = 인구 증가율이고, 그러면 유동/상주/직장
+   * 증가율 랭킹과 순위가 똑같은 중복 지표가 된다.
+   */
+  levelOnly: z.boolean().optional(),
+  /**
+   * lowBase 제외 사유 문구 — 지표마다 제외 기준이 달라 파이프라인이 문장째 준다.
+   * (증가율=직전 분기 중앙값 미만 / 밀도=면적 하위 5%). 없으면 UI 기본 문구.
+   */
+  lowBaseNote: z.string().optional(),
 });
 
 export const RankingEntry = z.object({

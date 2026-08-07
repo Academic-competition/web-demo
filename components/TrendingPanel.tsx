@@ -20,7 +20,17 @@ import type { RankingEntry, RankingsResult } from "@/lib/contracts";
 
 const TOP_N = 10;
 /** 지표 표시 순서 — 계약의 RankingMetricKey 와 같은 키 */
-const METRIC_ORDER = ["sales", "stores", "footTraffic", "resident", "worker"] as const;
+const METRIC_ORDER = [
+  "sales",
+  "stores",
+  "footTraffic",
+  "resident",
+  "worker",
+  // 밀도 3종은 절대 인구 뒤에. 앞 5종은 전부 절대값이라 "면적 대비 밀집"에 답하지 못한다
+  "footTrafficDensity",
+  "residentDensity",
+  "workerDensity",
+] as const;
 
 type SortBasis = "value" | "changePct";
 type Unit = "sangwon" | "dong";
@@ -31,6 +41,14 @@ function fmtValue(v: number, unit: string): string {
     if (v >= 1e8) return `${(v / 1e8).toFixed(0)}억`;
     return `${Math.round(v / 1e4).toLocaleString()}만`;
   }
+  if (unit === "명/km²") {
+    // 지표마다 자릿수가 3배 넘게 벌어진다 — 유동은 분기 연인원이라 억대(서울 중앙값
+    // 824만/km²), 상주는 2.5만, 직장은 0.76만. 만 단위로 일괄 접으면 상주 50,730 이
+    // "5만" 이 돼 순위가 다 같아 보인다. 천만 이상만 접고 나머지는 원 자릿수를 남긴다.
+    if (v >= 1e8) return `${(v / 1e8).toFixed(1)}억/km²`;
+    if (v >= 1e7) return `${Math.round(v / 1e4).toLocaleString()}만/km²`;
+    return `${Math.round(v).toLocaleString()}/km²`;
+  }
   if (v >= 1e4) return `${(v / 1e4).toFixed(1)}만${unit === "명" ? "명" : ""}`;
   return `${v.toLocaleString()}${unit === "개" ? "개" : unit === "명" ? "명" : ""}`;
 }
@@ -40,7 +58,9 @@ function rankRows<T extends { metrics: Record<string, RankingEntry> }>(
   items: T[],
   metricKey: string,
   basis: SortBasis,
-  topN = TOP_N
+  topN = TOP_N,
+  /** 수준 정렬에서도 lowBase 를 빼야 하는 지표 (밀도 — 분모가 작은 상권이 상위를 점령) */
+  excludeLowBase = false
 ): { row: T; m: RankingEntry }[] {
   const picked = items
     .map((r) => ({ row: r, m: r.metrics[metricKey] }))
@@ -53,7 +73,10 @@ function rankRows<T extends { metrics: Record<string, RankingEntry> }>(
       .sort((a, b) => b.m.changePct! - a.m.changePct! || b.m.value - a.m.value)
       .slice(0, topN);
   }
-  return picked.sort((a, b) => b.m.value - a.m.value).slice(0, topN);
+  return picked
+    .filter((x) => !excludeLowBase || !x.m.lowBase)
+    .sort((a, b) => b.m.value - a.m.value)
+    .slice(0, topN);
 }
 
 export default function TrendingPanel({
@@ -80,15 +103,33 @@ export default function TrendingPanel({
     .filter(([, m]) => m.subOf === "footTraffic")
     .map(([k, m]) => ({ key: k.replace("footTraffic_", ""), label: m.label.replace("유동인구 ", "") }));
 
+  /**
+   * 증가율이 없는 지표(밀도) — 파이프라인이 levelOnly 로 선언한다.
+   * 정렬 상태를 되돌리는 대신 유효값으로 덮어쓴다 (지표를 오가도 상태가 꼬이지 않는다).
+   */
+  const levelOnly = !!meta?.levelOnly;
+  const effBasis: SortBasis = levelOnly ? "value" : basis;
+  /**
+   * 수준 정렬에서 lowBase 를 빼는 조건 — 아래 `lowBaseApplied`(고지 문구) 와 **같은 식**이어야
+   * 한다. 밝히지 않고 행을 빼지 않는다는 원칙이라, 조건이 갈라지면 조용한 누락이 된다.
+   * 동네는 파이프라인이 lowBase 를 안 매긴다(여러 상권의 면적 합이라 분모 과소가 없다 —
+   * 397개 중 하한 미달 2개, 상위권은 여의동·삼성1동 같은 실제 오피스 밀집).
+   */
+  const excludeLow = levelOnly && unit === "sangwon";
+
   const sangwonRows = useMemo(
-    () => (unit === "sangwon" ? rankRows(data.rows, metricKey, basis) : []),
-    [data, unit, metricKey, basis]
+    () => (unit === "sangwon" ? rankRows(data.rows, metricKey, effBasis, TOP_N, excludeLow) : []),
+    [data, unit, metricKey, effBasis, excludeLow]
   );
   const dongRows = useMemo(
-    () => (unit === "dong" ? rankRows(data.dongs, metricKey, basis) : []),
-    [data, unit, metricKey, basis]
+    () => (unit === "dong" ? rankRows(data.dongs, metricKey, effBasis, TOP_N, excludeLow) : []),
+    [data, unit, metricKey, effBasis, excludeLow]
   );
-  /** 펼친 동의 상권들 — 같은 지표로 정렬 (동네 값이 이 상권들의 합임을 그대로 보여준다) */
+  /**
+   * 펼친 동의 상권들 — 같은 지표로 정렬 (동네 값이 이 상권들의 합임을 그대로 보여준다).
+   * 밀도는 합이 아니라 면적 가중 평균이라 이 목록의 값을 더해도 동 값이 안 나온다 —
+   * 소속 상권 목록으로만 읽을 것. lowBase 도 여기선 거르지 않는다 (랭킹이 아니라 구성원).
+   */
   const drilldown = useMemo(() => {
     if (openDong == null) return [];
     return rankRows(
@@ -102,6 +143,11 @@ export default function TrendingPanel({
   if (!meta) return null;
 
   const unitLabel = unit === "sangwon" ? "상권" : "동네";
+  /** lowBase 제외를 **실제로 적용한 경우에만** 밝힌다 (조건은 위 excludeLow 와 한 쌍) */
+  const lowBaseApplied = effBasis === "changePct" || excludeLow;
+  const lowBaseText =
+    meta.lowBaseNote ??
+    `직전 분기 규모가 전체 중앙값 미만인 소규모 ${unitLabel}은 증가율 순위에서 제외했습니다 (소표본 노이즈 방지).`;
 
   return (
     <div className="rise-in space-y-2">
@@ -110,7 +156,7 @@ export default function TrendingPanel({
           뜨는 {unitLabel} TOP {unit === "sangwon" ? sangwonRows.length : dongRows.length}
         </h2>
         <p className="mt-0.5 text-[11px] text-muted">
-          {meta.label} {basis === "value" ? "상위" : "증가율 상위"} · 기준 {meta.asOf} ·{" "}
+          {meta.label} {effBasis === "value" ? "상위" : "증가율 상위"} · 기준 {meta.asOf} ·{" "}
           {unit === "sangwon"
             ? "클릭하면 그 상권 분석으로 이동합니다"
             : "동을 클릭하면 소속 상권이 펼쳐집니다"}
@@ -191,8 +237,9 @@ export default function TrendingPanel({
         </div>
       )}
 
-      {/* 정렬 기준 (golmok 상세조건의 최고순위/비교증가율 대응) */}
-      <div className="flex gap-1">
+      {/* 정렬 기준 (golmok 상세조건의 최고순위/비교증가율 대응).
+          밀도(levelOnly)는 증가율이 인구 증가율과 같은 중복 지표라 토글 자체를 감춘다 */}
+      <div className={`flex gap-1 ${levelOnly ? "hidden" : ""}`}>
         {(
           [
             ["value", "수준 (최고순위)"],
@@ -223,7 +270,7 @@ export default function TrendingPanel({
                 subtitle={`${row.gu ?? ""}${row.category ? ` · ${row.category}` : ""}`}
                 entry={m}
                 unit={meta.unit}
-                basis={basis}
+                basis={effBasis}
                 onClick={() => onPick(row.code)}
               />
             </li>
@@ -239,7 +286,7 @@ export default function TrendingPanel({
                 subtitle={row.gu ?? ""}
                 entry={m}
                 unit={meta.unit}
-                basis={basis}
+                basis={effBasis}
                 active={openDong === row.code}
                 onClick={() => setOpenDong(openDong === row.code ? null : row.code)}
               />
@@ -278,14 +325,13 @@ export default function TrendingPanel({
 
       <p className="border-t border-line/50 pt-1.5 text-[10px] leading-relaxed text-faint">
         {meta.scope} 기준.
-        {unit === "dong" && " 동네 값은 소속 상권 값의 합산입니다 (상권분석서비스 영역 밖 지역 미포함)."}
+        {/* 밀도는 위 scope 가 이미 "Σ인구/Σ면적" 을 밝히므로 합산 문장을 반복하지 않는다 */}
+        {unit === "dong" &&
+          (levelOnly
+            ? " 동네 값에 상권분석서비스 영역 밖 지역은 포함되지 않습니다."
+            : " 동네 값은 소속 상권 값의 합산입니다 (상권분석서비스 영역 밖 지역 미포함).")}
         {" "}값·증감률은 모델 파이프라인 산출이며 화면은 정렬만 합니다.
-        {basis === "changePct" && (
-          <>
-            {" "}직전 분기 규모가 전체 중앙값 미만인 소규모 {unitLabel}은 증가율 순위에서
-            제외했습니다 (소표본 노이즈 방지).
-          </>
-        )}
+        {lowBaseApplied && <> {lowBaseText}</>}
       </p>
     </div>
   );
